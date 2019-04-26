@@ -14,7 +14,7 @@ import utils
 hyperp = {"INITIAL_TRAIN_EPS" : 50,
 
 "BC_LR" : 1e-3,
-"BC_HD" : 128,
+"BC_HD" : 32,
 "BC_HL" : 2,
 "BC_BS" : 64,
 "BC_EPS" : 200,

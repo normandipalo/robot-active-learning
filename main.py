@@ -140,6 +140,12 @@ def go(seed, file):
     file.write(str("Normal learning results " + str(seed) + " : " + str(result_t)))
     
     ## Active Learning Part ###
+    if not tf.__version__ == "2.0.0-alpha0":
+        tf.random.set_random_seed(seed)
+    else: 
+        tf.random.set_seed(seed)
+    env = gym.make("FetchPickAndPlace-v1")
+    env.seed(seed)
     
     states, actions = states[:math.floor(len(states)*ORG_TRAIN_SPLIT)], actions[:math.floor(len(actions)*ORG_TRAIN_SPLIT)]
     

@@ -1,18 +1,18 @@
-hyperp = {"INITIAL_TRAIN_EPS" : 200,
+hyperp = {"INITIAL_TRAIN_EPS" : 50,
 
 "BC_LR" : 1e-3,
 "BC_HD" : 128,
 "BC_HL" : 2,
 "BC_BS" : 64,
-"BC_EPS" : 300,
+"BC_EPS" : 10,
 
 "AE_HD" : 128,
 "AE_HL" : 2,
 "AE_LR" : 1e-3,
 "AE_BS" : 64,
-"AE_EPS" : 50,
+"AE_EPS" : 30,
 
-"TEST_EPS" : 500,
+"TEST_EPS" : 50,
 "ACTIVE_STEPS_RETRAIN" : 10,
 "ACTIVE_ERROR_THR" : 1.5,
 
