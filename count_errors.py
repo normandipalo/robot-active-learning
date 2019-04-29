@@ -102,14 +102,16 @@ def test(model, ae, test_set, env, xm, xs, am, ast, fulltraj = False, render = F
           #      print("SUCCESS!")
                 succeded = 1
                 successes +=1
-
-                error_succ += tot_error
+                
+                #divide by number of steps to get an average
+                error_succ += tot_error/(i + 1)
 
                 break
         if not succeded: 
          #   print("FAILURE")
             failures+=1
-            error_fail += tot_error
+            #divide by number of steps to get an average
+            error_fail += tot_error/(i + 1)
           
     return successes, failures, error_succ/successes, error_fail/failures
 
