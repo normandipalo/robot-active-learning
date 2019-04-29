@@ -11,7 +11,7 @@ from ae import AE, DAE
 import man_controller
 import utils
 
-hyperp = {"INITIAL_TRAIN_EPS" : 50,
+hyperp = {"INITIAL_TRAIN_EPS" : 200,
 
 "BC_LR" : 1e-3,
 "BC_HD" : 32,
@@ -19,17 +19,18 @@ hyperp = {"INITIAL_TRAIN_EPS" : 50,
 "BC_BS" : 64,
 "BC_EPS" : 200,
 
-"AE_HD" : 32,
+"AE_HD" : 8,
 "AE_HL" : 2,
 "AE_LR" : 1e-3,
-"AE_BS" : 32,
+"AE_BS" : 64,
 "AE_EPS" : 10,
 
 "TEST_EPS" : 500,
 "ACTIVE_STEPS_RETRAIN" : 10,
 "ACTIVE_ERROR_THR" : 1.5,
 
-"ORG_TRAIN_SPLIT" : 1.}
+"ORG_TRAIN_SPLIT" : 1.,
+"FULL_TRAJ_ERROR" : True}
 
 INITIAL_TRAIN_EPS = hyperp["INITIAL_TRAIN_EPS"]
 BC_LR = hyperp["BC_LR"]
@@ -43,6 +44,7 @@ AE_HL = hyperp["AE_HL"]
 AE_LR = hyperp["AE_LR"]
 AE_BS = hyperp["AE_BS"]
 AE_EPS = hyperp["AE_EPS"]
+FULL_TRAJ = hyperp["FULL_TRAJ_ERROR"]
 
 TEST_EPS = hyperp["TEST_EPS"]
 ACTIVE_STEPS_RETRAIN = hyperp["ACTIVE_STEPS_RETRAIN"]
@@ -62,7 +64,7 @@ def get_experience(eps, env):
                 
     return states, actions
 
-def test(model, ae, test_set, env, xm, xs, am, ast, render = False):
+def test(model, ae, test_set, env, xm, xs, am, ast, fulltraj = False, render = False):
     successes, failures = 0,0
     error_succ, error_fail = 0.,0.
     for i in range(len(test_set)):
@@ -71,9 +73,11 @@ def test(model, ae, test_set, env, xm, xs, am, ast, render = False):
         env = utils.set_state(env, test_set[i][0], test_set[i][1])
         state, *_ = env.step([0.,0.,0.,0.])
         picked = [False]
+        
         error = ae.error((np.concatenate((state["observation"],
                                     state["achieved_goal"],
                                     state["desired_goal"])).reshape((1,-1)) - xm)/xs)
+        tot_error = error
         #print("Uncertainty ", error.numpy())
         for i in range(100):
             action = model((np.concatenate((state["observation"],
@@ -84,19 +88,28 @@ def test(model, ae, test_set, env, xm, xs, am, ast, render = False):
             new_state, *_ = env.step(action[0])
          #   print(action)
             if render: env.render()
+            
             state = new_state
-       
+            if fulltraj:
+            #If I choose to sum up the errors of the entire trajectory I integrate errors
+            # on tot_error
+                error = ae.error((np.concatenate((state["observation"],
+                                    state["achieved_goal"],
+                                    state["desired_goal"])).reshape((1,-1)) - xm)/xs)
+                tot_error+=error
+                
             if not np.linalg.norm((state["achieved_goal"]- state["desired_goal"])) > 0.07:
           #      print("SUCCESS!")
                 succeded = 1
                 successes +=1
-                error_succ += error
+
+                error_succ += tot_error
 
                 break
         if not succeded: 
          #   print("FAILURE")
             failures+=1
-            error_fail += error
+            error_fail += tot_error
           
     return successes, failures, error_succ/successes, error_fail/failures
 
@@ -138,6 +151,7 @@ def go(seed):
         tf.random.set_seed(seed)
     env = gym.make("FetchPickAndPlace-v1")
     env.seed(seed)
+    
     test_set = []
     for i in range(TEST_EPS):
         state = env.reset()
@@ -161,11 +175,28 @@ def go(seed):
 
     net.train(x, a, BC_BS, BC_EPS)
 
-    ae = DAE(31, AE_HD, AE_HL, AE_LR)
+    ae = AE(31, AE_HD, AE_HL, AE_LR)
 
     ae.train(x, AE_BS, AE_EPS)
-
-    succ, fail, error_avg_s, error_avg_f = test(net, ae, test_set, env, xm, xs, am, ast, False)
+    
+    tot_error_trainset = 0
+    for el in x:
+        error = ae.error(el.reshape((1,-1)))
+        tot_error_trainset+=error
+    tot_error_trainset/=len(x)
+    
+    print("Average error on train set", tot_error_trainset)
+    
+    # I try to estimate the error on full train trajectories by multiplying
+    # the average by len(dataset)/num_episodes, that is basically
+    # the average episode lenght.
+    if FULL_TRAJ:
+        tot_error_train_fulltraj = 0
+        avg_ep_lenght = len(x)/INITIAL_TRAIN_EPS
+        tot_error_train_fulltraj = tot_error_trainset*avg_ep_lenght
+    
+        print("Average full trajectory error on train set", tot_error_train_fulltraj)
+    succ, fail, error_avg_s, error_avg_f = test(net, ae, test_set, env, xm, xs, am, ast, fulltraj = FULL_TRAJ, render = False)
     print("Active learning results ", seed, " : ", succ, fail, error_avg_s, error_avg_f)
    # file.write(str("Active learning results " + str(seed) + " : " + str(result_t)))
     
@@ -179,7 +210,7 @@ if __name__ == "__main__":
     filename = strftime("%Y-%m-%d %H:%M:%S", gmtime()) + ".txt"
     print(filename)
    # with open(filename, "a+") as file:
-    for k in range(10):
+    for k in range(30):
         print(str(hyperp))
         print(str(k))
        

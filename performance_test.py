@@ -118,7 +118,7 @@ def go(seed, file):
     print("Normal learning results ", seed, " : ", result_t)
     file.write(str("Normal learning results " + str(seed) + " : " + str(result_t)))
     
-    ## Active Learning Part ###
+    """## Active Learning Part ###
     if not tf.__version__ == "2.0.0-alpha0":
         tf.random.set_random_seed(seed)
     else: 
@@ -166,7 +166,7 @@ def go(seed, file):
     
     #print("Active learning results ", seed, " : ",test(net, test_set, env, xm, xs, am, ast, True))
 
-        
+    """   
 
 
 if __name__ == "__main__":

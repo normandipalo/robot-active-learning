@@ -1,5 +1,0 @@
-{'INITIAL_TRAIN_EPS': 20, 'BC_LR': 0.001, 'BC_HD': 128, 'BC_HL': 2, 'BC_BS': 64, 'BC_EPS': 30, 'AE_HD': 128, 'AE_HL': 2, 'AE_LR': 0.001, 'AE_BS': 64, 'AE_EPS': 50, 'TEST_EPS': 500, 'ACTIVE_STEPS_RETRAIN': 10, 'ACTIVE_ERROR_THR': 1.5, 'ORG_TRAIN_SPLIT': 1.0}
-
-Normal learning results 0 : (57, 443)Active learning results 0 : (44, 456){'INITIAL_TRAIN_EPS': 20, 'BC_LR': 0.001, 'BC_HD': 128, 'BC_HL': 2, 'BC_BS': 64, 'BC_EPS': 30, 'AE_HD': 128, 'AE_HL': 2, 'AE_LR': 0.001, 'AE_BS': 64, 'AE_EPS': 50, 'TEST_EPS': 500, 'ACTIVE_STEPS_RETRAIN': 10, 'ACTIVE_ERROR_THR': 1.5, 'ORG_TRAIN_SPLIT': 1.0}
-
-Normal learning results 1 : (46, 454)

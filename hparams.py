@@ -1,22 +1,22 @@
-hyperp = {"INITIAL_TRAIN_EPS" : 50,
+hyperp = {"INITIAL_TRAIN_EPS" : 150,
 
 "BC_LR" : 1e-3,
-"BC_HD" : 128,
+"BC_HD" : 64,
 "BC_HL" : 2,
-"BC_BS" : 64,
-"BC_EPS" : 10,
+"BC_BS" : 128,
+"BC_EPS" : 150,
 
-"AE_HD" : 128,
+"AE_HD" : 32,
 "AE_HL" : 2,
 "AE_LR" : 1e-3,
 "AE_BS" : 64,
-"AE_EPS" : 30,
+"AE_EPS" : 20,
 
-"TEST_EPS" : 50,
-"ACTIVE_STEPS_RETRAIN" : 10,
-"ACTIVE_ERROR_THR" : 1.5,
+"TEST_EPS" : 10,
+"ACTIVE_STEPS_RETRAIN" : 1,
+"ACTIVE_ERROR_THR" : 1.1,
 
-"ORG_TRAIN_SPLIT" : 1.}
+"ORG_TRAIN_SPLIT" : .5}
 
 INITIAL_TRAIN_EPS = hyperp["INITIAL_TRAIN_EPS"]
 BC_LR = hyperp["BC_LR"]
