@@ -11,26 +11,28 @@ from ae import AE, DAE
 import man_controller
 import utils
 
-hyperp = {"INITIAL_TRAIN_EPS" : 200,
+hyperp = {"INITIAL_TRAIN_EPS" : 30,
 
 "BC_LR" : 1e-3,
-"BC_HD" : 32,
+"BC_HD" : 128,
 "BC_HL" : 2,
 "BC_BS" : 64,
-"BC_EPS" : 200,
+"BC_EPS" : 400,
 
 "AE_HD" : 8,
 "AE_HL" : 2,
 "AE_LR" : 1e-3,
 "AE_BS" : 64,
-"AE_EPS" : 10,
+"AE_EPS" : 20,
 
-"TEST_EPS" : 500,
+"TEST_EPS" : 100,
 "ACTIVE_STEPS_RETRAIN" : 10,
 "ACTIVE_ERROR_THR" : 1.5,
 
 "ORG_TRAIN_SPLIT" : 1.,
-"FULL_TRAJ_ERROR" : True}
+"FULL_TRAJ_ERROR" : False,
+"CTRL_NORM" : True,
+"RENDER_TEST" : False}
 
 INITIAL_TRAIN_EPS = hyperp["INITIAL_TRAIN_EPS"]
 BC_LR = hyperp["BC_LR"]
@@ -45,12 +47,14 @@ AE_LR = hyperp["AE_LR"]
 AE_BS = hyperp["AE_BS"]
 AE_EPS = hyperp["AE_EPS"]
 FULL_TRAJ = hyperp["FULL_TRAJ_ERROR"]
+CTRL_NORM = hyperp["CTRL_NORM"]
 
 TEST_EPS = hyperp["TEST_EPS"]
 ACTIVE_STEPS_RETRAIN = hyperp["ACTIVE_STEPS_RETRAIN"]
 ACTIVE_ERROR_THR = hyperp["ACTIVE_ERROR_THR"]
 
 ORG_TRAIN_SPLIT = hyperp["ORG_TRAIN_SPLIT"]
+RENDER_TEST = hyperp["RENDER_TEST"]
 
 #from hparams import *
 
@@ -58,7 +62,7 @@ def get_experience(eps, env):
     states, actions = [], []
     for ep in range(eps):
         state = env.reset()
-        new_states, new_acts = man_controller.get_demo(env, state)
+        new_states, new_acts = man_controller.get_demo(env, state, CTRL_NORM)
         states+=new_states
         actions+=new_acts
                 
@@ -67,6 +71,7 @@ def get_experience(eps, env):
 def test(model, ae, test_set, env, xm, xs, am, ast, fulltraj = False, render = False):
     successes, failures = 0,0
     error_succ, error_fail = 0.,0.
+    succ_errors_list, fail_errors_list = [], []
     for i in range(len(test_set)):
         succeded = 0
         env.reset()
@@ -97,23 +102,32 @@ def test(model, ae, test_set, env, xm, xs, am, ast, fulltraj = False, render = F
                                     state["achieved_goal"],
                                     state["desired_goal"])).reshape((1,-1)) - xm)/xs)
                 tot_error+=error
-                
+
             if not np.linalg.norm((state["achieved_goal"]- state["desired_goal"])) > 0.07:
           #      print("SUCCESS!")
                 succeded = 1
                 successes +=1
                 
                 #divide by number of steps to get an average
-                error_succ += tot_error/(i + 1)
-
+                if fulltraj:
+                    error_succ += tot_error/(i + 1)
+                    succ_errors_list.append(tot_error/(i + 1))
+                else:
+                    error_succ += tot_error
+                    succ_errors_list.append(tot_error)
                 break
         if not succeded: 
          #   print("FAILURE")
             failures+=1
             #divide by number of steps to get an average
-            error_fail += tot_error/(i + 1)
-          
-    return successes, failures, error_succ/successes, error_fail/failures
+            if fulltraj:
+                error_fail += tot_error/(i + 1)
+                fail_errors_list.append(tot_error/(i+1))
+            else:
+                error_fail += tot_error
+                fail_errors_list.append(tot_error)
+                
+    return successes, failures, error_succ/successes, error_fail/failures, succ_errors_list, fail_errors_list
 
 def get_active_exp(env, threshold, ae, xm, xs, render):
     
@@ -141,7 +155,7 @@ def get_active_exp(env, threshold, ae, xm, xs, render):
                                         state["desired_goal"])).reshape((1,-1)) - xm)/xs)
   #      print("predicted error", error.numpy(), err_avg.numpy())
  #   print("Tried ", tried, " initial states")
-    new_states, new_acts = man_controller.get_demo(env, state, render)
+    new_states, new_acts = man_controller.get_demo(env, state, CTRL_NORM, render)
 
     return new_states, new_acts
 
@@ -162,7 +176,7 @@ def go(seed):
 
     states, actions = get_experience(INITIAL_TRAIN_EPS, env)
     print("Normal states, actions ", len(states), len(actions))
-
+    file.write("Normal states, actions " + str(len(states)) + str(len(actions)))
     net = model.BCModel(states[0].shape[0], actions[0].shape[0], BC_HD, BC_HL, BC_LR)
 
     x = np.array(states)
@@ -188,6 +202,7 @@ def go(seed):
     tot_error_trainset/=len(x)
     
     print("Average error on train set", tot_error_trainset)
+    file.write(str("Average error on train set") +str(tot_error_trainset))
     
     # I try to estimate the error on full train trajectories by multiplying
     # the average by len(dataset)/num_episodes, that is basically
@@ -198,8 +213,10 @@ def go(seed):
         tot_error_train_fulltraj = tot_error_trainset*avg_ep_lenght
     
         print("Average full trajectory error on train set", tot_error_train_fulltraj)
-    succ, fail, error_avg_s, error_avg_f = test(net, ae, test_set, env, xm, xs, am, ast, fulltraj = FULL_TRAJ, render = False)
-    print("Active learning results ", seed, " : ", succ, fail, error_avg_s, error_avg_f)
+        file.write(str("Average full trajectory error on train set") + str(tot_error_train_fulltraj))
+    succ, fail, error_avg_s, error_avg_f, succ_list, fail_list = test(net, ae, test_set, env, xm, xs, am, ast, fulltraj = FULL_TRAJ, render = RENDER_TEST)
+    print("Active learning results ", seed, " : ", succ, fail, "avg error on succ trails: ", error_avg_s, "on fail: ", error_avg_f, "std on succ:", np.std(succ_list), "on fail:", np.std(fail_list))
+    file.write(str("Active learning results ") + str(seed) +  str(" : ") + str(succ) + str(fail) + str(error_avg_s) + str(error_avg_f) + str(np.std(succ_list)) +  str(np.std(fail_list)))
    # file.write(str("Active learning results " + str(seed) + " : " + str(result_t)))
     
     #print("Active learning results ", seed, " : ",test(net, test_set, env, xm, xs, am, ast, True))
@@ -209,13 +226,14 @@ def go(seed):
 
 if __name__ == "__main__":
 
-    filename = strftime("%Y-%m-%d %H:%M:%S", gmtime()) + ".txt"
+    filename = "logs/counterrors" + strftime("%Y-%m-%d %H:%M:%S", gmtime()) + ".txt"
     print(filename)
-   # with open(filename, "a+") as file:
-    for k in range(30):
-        print(str(hyperp))
-        print(str(k))
-       
-        go(k)
+    with open(filename, "a+") as file:
+        for k in range(30):
+            print(str(hyperp))
+            print(str(k))
+            file.write(str(hyperp))
+            file.write("\n\n")
+            go(k)
 
     

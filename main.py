@@ -17,7 +17,7 @@ def get_experience(eps, env):
     states, actions = [], []
     for ep in range(eps):
         state = env.reset()
-        new_states, new_acts = man_controller.get_demo(env, state)
+        new_states, new_acts = man_controller.get_demo(env, state, CTRL_NORM)
         states+=new_states
         actions+=new_acts
                 
@@ -79,7 +79,7 @@ def get_active_exp(env, threshold, ae, xm, xs, render):
                                         state["desired_goal"])).reshape((1,-1)) - xm)/xs)
   #      print("predicted error", error.numpy(), err_avg.numpy())
  #   print("Tried ", tried, " initial states")
-    new_states, new_acts = man_controller.get_demo(env, state, render)
+    new_states, new_acts = man_controller.get_demo(env, state, CTRL_NORM, render)
 
     return new_states, new_acts
 
@@ -91,6 +91,7 @@ def go(seed, file):
         tf.random.set_seed(seed)
     env = gym.make("FetchPickAndPlace-v1")
     env.seed(seed)
+    
     test_set = []
     for i in range(TEST_EPS):
         state = env.reset()
@@ -126,8 +127,8 @@ def go(seed, file):
     env = gym.make("FetchPickAndPlace-v1")
     env.seed(seed)
     
-    #states, actions = states[:math.floor(len(states)*ORG_TRAIN_SPLIT)], actions[:math.floor(len(actions)*ORG_TRAIN_SPLIT)]
-    get_experience(int(INITIAL_TRAIN_EPS*ORG_TRAIN_SPLIT), env)
+    states, actions = states[:math.floor(len(states)*ORG_TRAIN_SPLIT)], actions[:math.floor(len(actions)*ORG_TRAIN_SPLIT)]
+    #get_experience(int(INITIAL_TRAIN_EPS*ORG_TRAIN_SPLIT), env)
   
     for i in range(int(((1.-ORG_TRAIN_SPLIT)*INITIAL_TRAIN_EPS)//ACTIVE_STEPS_RETRAIN)):
     
