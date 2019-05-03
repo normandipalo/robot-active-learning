@@ -175,10 +175,11 @@ if __name__ == "__main__":
     filename = "logs/" + strftime("%Y-%m-%d %H:%M:%S", gmtime()) + ".txt"
     print(filename)
     with open(filename, "a+") as file:
-        for k in range(10):
-            print(str(hyperp))
+        print(str(hyperp))
+        file.write(str(hyperp))
+        for k in range(0,50):
             print(str(k))
-            file.write(str(hyperp))
+            file.write("\n" + str(k))
             file.write("\n\n")
             go(k, file)
 
