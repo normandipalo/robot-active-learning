@@ -19,9 +19,9 @@ hyperp = {"INITIAL_TRAIN_EPS" : 30,
 "BC_BS" : 64,
 "BC_EPS" : 400,
 
-"AE_HD" : 8,
-"AE_HL" : 2,
-"AE_LR" : 1e-3,
+"AE_HD" : 256,
+"AE_HL" : 1,
+"AE_LR" : 1e-2,
 "AE_BS" : 64,
 "AE_EPS" : 20,
 
@@ -128,6 +128,62 @@ def test(model, ae, test_set, env, xm, xs, am, ast, fulltraj = False, render = F
                 fail_errors_list.append(tot_error)
                 
     return successes, failures, error_succ/successes, error_fail/failures, succ_errors_list, fail_errors_list
+    
+def predict(model, ae, test_set, env, xm, xs, am, ast, tot_error_trainset):
+    succ_tp, succ_fp, succ_tn, succ_fn = 0,0,0,0
+    successes, failures = 0, 0
+    for i in range(len(test_set)):
+        
+        env.reset()
+        env = utils.set_state(env, test_set[i][0], test_set[i][1])
+        state, *_ = env.step([0.,0.,0.,0.])
+        picked = [False]
+        succeded = False
+        error = ae.error((np.concatenate((state["observation"],
+                                    state["achieved_goal"],
+                                    state["desired_goal"])).reshape((1,-1)) - xm)/xs)
+                            
+        if error > 2.3*tot_error_trainset:
+            prediction = "failure"
+        else:
+            prediction = "success"
+      #  prediction = "success" #assume you think you'll always succeed
+            
+        for i in range(100):
+            action = model((np.concatenate((state["observation"],
+                                        state["achieved_goal"],
+                                        state["desired_goal"])).reshape((1,-1)) - xm)/xs)
+
+            action = action*ast + am
+            new_state, *_ = env.step(action[0])
+         #   print(action)
+            
+            state = new_state
+       
+
+            if not np.linalg.norm((state["achieved_goal"]- state["desired_goal"])) > 0.07:
+          #      print("SUCCESS!")
+                successes += 1
+                succeded = True
+                if prediction == "success":
+                    succ_tp +=1
+                elif prediction == "failure":
+                    succ_fn +=1
+                break
+                
+                #divide by number of steps to get an average
+
+        if not succeded: 
+            failures += 1
+            if prediction == "failure":
+                succ_tn +=1
+            elif prediction == "success":
+                succ_fp += 1
+                
+    print("successes, failures", successes, failures)
+    return succ_tp, succ_fp, succ_tn, succ_fn
+        
+    
 
 def get_active_exp(env, threshold, ae, xm, xs, render):
     
@@ -191,7 +247,8 @@ def go(seed):
 
     net.train(x, a, BC_BS, BC_EPS)
 
-    ae = AE(31, AE_HD, AE_HL, AE_LR)
+    #ae = AE(31, AE_HD, AE_HL, AE_LR)
+    ae = DAE(31, AE_HD, AE_HL, AE_LR)
 
     ae.train(x, AE_BS, AE_EPS)
     
@@ -207,6 +264,7 @@ def go(seed):
     # I try to estimate the error on full train trajectories by multiplying
     # the average by len(dataset)/num_episodes, that is basically
     # the average episode lenght.
+    
     if FULL_TRAJ:
         tot_error_train_fulltraj = 0
         avg_ep_lenght = len(x)/INITIAL_TRAIN_EPS
@@ -217,10 +275,20 @@ def go(seed):
     succ, fail, error_avg_s, error_avg_f, succ_list, fail_list = test(net, ae, test_set, env, xm, xs, am, ast, fulltraj = FULL_TRAJ, render = RENDER_TEST)
     print("Active learning results ", seed, " : ", succ, fail, "avg error on succ trails: ", error_avg_s, "on fail: ", error_avg_f, "std on succ:", np.std(succ_list), "on fail:", np.std(fail_list))
     file.write(str("Active learning results ") + str(seed) +  str(" : ") + str(succ) + str(fail) + str(error_avg_s) + str(error_avg_f) + str(np.std(succ_list)) +  str(np.std(fail_list)))
-   # file.write(str("Active learning results " + str(seed) + " : " + str(result_t)))
+  
+  #  file.write(str("Active learning results " + str(seed) + " : " + str(result_t)))
     
-    #print("Active learning results ", seed, " : ",test(net, test_set, env, xm, xs, am, ast, True))
-
+    
+    
+    succ_tp, succ_fp, succ_tn, succ_fn = predict(net, ae, test_set, env, xm, xs, am, ast, tot_error_trainset)
+    
+    #change to consider failures
+    #succ_tp, succ_fp, succ_tn, succ_fn = succ_tn, succ_fn, succ_tp, succ_fp
+    
+    print("succ tp, fp, tn, fn", succ_tp, succ_fp, succ_tn, succ_fn)
+    precision = (succ_tp/(succ_tp+succ_fp + 0.001))
+    recall = (succ_tp/(succ_tp+succ_fn))
+    print("F1 score", (precision*recall/(precision + recall)))
         
 
 
