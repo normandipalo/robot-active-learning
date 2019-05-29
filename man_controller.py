@@ -1,4 +1,5 @@
 import numpy as np
+import copy
 
 def reach_xy_contr(state, norm = False):
     cube_pos = state["achieved_goal"]
@@ -52,7 +53,32 @@ def controller(state, picked, norm = False):
         action, steps = go_to_goal(state, norm)
     return action, steps
 
-
+def get_demo_cam(env, c_state, norm = False, render = False, depth = False):
+    state = copy.copy(c_state)
+    states, actions = [], []
+    picked = [False]
+    _ = env.render(mode = "rgb_array")
+    for i in range(200):
+        action, steps = controller(state, picked, norm)
+        for s in range(steps):
+            
+            new_state, *_ = env.step(action)
+            if render: env.render("rgb_array")
+            s = env.env.viewer.sim.render(50, 50, camera_name = 'external_camera_0')[::-1,:,:].astype(np.float64)/255.
+            a, d = env.env.sim.render(50, 50, depth = True, camera_name = 'external_camera_0')
+            d = d[::-1,:].astype(np.float64)
+            if not depth:
+                states.append(s)
+            else:
+                states.append(np.concatenate((s,d[:,:,None]), -1))
+            actions.append(action)
+            state = new_state
+            print(state["achieved_goal"], state["desired_goal"])
+            print(action)
+        if not np.linalg.norm((state["achieved_goal"]- state["desired_goal"])) > 0.05:
+            break
+    return states, actions
+    
 def get_demo(env, state, norm = False, render = False):
     states, actions = [], []
     picked = [False]
@@ -66,6 +92,6 @@ def get_demo(env, state, norm = False, render = False):
             if render: env.render()
             actions.append(action)
             state = new_state
-        if not np.linalg.norm((state["achieved_goal"]- state["desired_goal"])) > 0.01:
+        if not np.linalg.norm((state["achieved_goal"]- state["desired_goal"])) > 0.05:
             break
     return states, actions
