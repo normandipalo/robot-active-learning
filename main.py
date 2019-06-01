@@ -179,7 +179,10 @@ def go(seed, file):
 
         if AE_RESTART: ae = DAE(31, AE_HD, AE_HL, AE_LR, set_seed = seed)
 
+        start = time.time()
         ae.train(x, AE_BS, AE_EPS)
+        print("Training took:")
+        print(time.time() - start)
 
         for j in range(ACTIVE_STEPS_RETRAIN):
             new_s, new_a = get_active_exp(env, ACTIVE_ERROR_THR, ae, xm, xs, RENDER_ACT_EXP, TAKE_MAX, MAX_ACT_STEPS)

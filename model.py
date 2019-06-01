@@ -17,7 +17,7 @@ class BCModel(tf.keras.Model):
         self.opt = tf.keras.optimizers.Adam(learning_rate = lr)
 
 
-    @tf.function
+#    @tf.function
     def call(self, x):
         for l in self._layers:
             x = l(x)
@@ -44,9 +44,11 @@ class BCModel(tf.keras.Model):
 #        self.xstd = tf.Variable(x.std())
         ds = self._create_ds(x, y, batch_size, epochs)
         for i, el in enumerate(ds):
+            if verbose:
+                if i%1000==0: print("Element ", i)
             self.train_step(el, print_loss, verbose)
 
-    @tf.function
+#    @tf.function
     def train_step(self, el, print_loss = False, verbose = False):
         with tf.GradientTape() as tape:
             x, y = el
