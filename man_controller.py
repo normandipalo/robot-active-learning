@@ -61,9 +61,12 @@ def get_demo_cam(env, c_state, norm = False, render = False, depth = False):
     for i in range(200):
         action, steps = controller(state, picked, norm)
         for s in range(steps):
-            
+
             new_state, *_ = env.step(action)
             if render: env.render("rgb_array")
+            #Have to call two times to make it work.
+            s = env.env.viewer.sim.render(50, 50, camera_name = 'external_camera_0')[::-1,:,:].astype(np.float64)/255.
+            a, d = env.env.sim.render(50, 50, depth = True, camera_name = 'external_camera_0')
             s = env.env.viewer.sim.render(50, 50, camera_name = 'external_camera_0')[::-1,:,:].astype(np.float64)/255.
             a, d = env.env.sim.render(50, 50, depth = True, camera_name = 'external_camera_0')
             d = d[::-1,:].astype(np.float64)
@@ -73,12 +76,12 @@ def get_demo_cam(env, c_state, norm = False, render = False, depth = False):
                 states.append(np.concatenate((s,d[:,:,None]), -1))
             actions.append(action)
             state = new_state
-            print(state["achieved_goal"], state["desired_goal"])
-            print(action)
+           # print(state["achieved_goal"], state["desired_goal"])
+           # print(action)
         if not np.linalg.norm((state["achieved_goal"]- state["desired_goal"])) > 0.05:
             break
     return states, actions
-    
+
 def get_demo(env, state, norm = False, render = False):
     states, actions = [], []
     picked = [False]
@@ -93,5 +96,24 @@ def get_demo(env, state, norm = False, render = False):
             actions.append(action)
             state = new_state
         if not np.linalg.norm((state["achieved_goal"]- state["desired_goal"])) > 0.05:
+            break
+    return states, actions
+
+
+def get_demo_cam2(env, c_state, norm = False, render = False):
+    state = copy.copy(c_state)
+    states, actions = [], []
+    picked = [False]
+    for i in range(200):
+        action, steps = controller(state[0], picked, norm)
+        print(steps)
+        for s in range(steps):
+            #Concat im rgb and depth.
+            states.append(np.concatenate((state[1], state[2]), -1))
+            new_state, *_ = env.step(action)
+            if render: env.render()
+            actions.append(action)
+            state = new_state
+        if not np.linalg.norm((state[0]["achieved_goal"]- state[0]["desired_goal"])) > 0.05:
             break
     return states, actions

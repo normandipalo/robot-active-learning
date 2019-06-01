@@ -7,7 +7,7 @@ import datetime
 from time import gmtime, strftime
 
 import model
-from ae import AE, DAE
+from ae import *
 import man_controller
 import utils
 
@@ -248,7 +248,7 @@ def go(seed):
     net.train(x, a, BC_BS, BC_EPS)
 
     #ae = AE(31, AE_HD, AE_HL, AE_LR)
-    ae = DAE(31, AE_HD, AE_HL, AE_LR)
+    ae = RandomNetwork(1, AE_HD, AE_HL, AE_LR)
 
     ae.train(x, AE_BS, AE_EPS)
     

@@ -22,8 +22,8 @@ def get_experience(eps, env):
     states, actions = [], []
     for ep in range(eps):
         state = env.reset()
-        state = robot_reset(env)
-        new_states, new_acts = man_controller.get_demo(env, state, CTRL_NORM)
+        #state = robot_reset(env)
+        new_states, new_acts = man_controller.get_demo_cam2(env, state, CTRL_NORM)
         states+=new_states
         actions+=new_acts
 
@@ -38,9 +38,7 @@ def test(model, test_set, env, xm, xs, am, ast, render = False):
         state, *_ = env.step([0.,0.,0.,0.])
         picked = [False]
         for i in range(100):
-            action = model((np.concatenate((state["observation"],
-                                        state["achieved_goal"],
-                                        state["desired_goal"])).reshape((1,-1)) - xm)/xs)
+            action = model((np.concatenate((state[1], state[2]), -1)))
 
             action = action*ast + am
             new_state, *_ = env.step(action[0])
@@ -48,7 +46,7 @@ def test(model, test_set, env, xm, xs, am, ast, render = False):
             if render: env.render()
             state = new_state
 
-            if not np.linalg.norm((state["achieved_goal"]- state["desired_goal"])) > 0.10:
+            if not np.linalg.norm((state[0]["achieved_goal"]- state[0]["desired_goal"])) > 0.10:
         #        print("SUCCESS!")
                 succeded = 1
                 successes +=1
@@ -64,17 +62,13 @@ def get_active_exp(env, threshold, ae, xm, xs, render, take_max = False, max_act
     err_avg = 0
     for i in range(20):
         state = env.reset()
-        state = robot_reset(env)
-        error = ae.error((np.concatenate((state["observation"],
-                                    state["achieved_goal"],
-                                    state["desired_goal"])).reshape((1,-1)) - xm)/xs)
+    #    state = robot_reset(env)
+        error = ae.error((np.concatenate((state[1], state[2]), -1)))
         err_avg+=error
     err_avg/=20
 
     state = env.reset()
-    error = ae.error((np.concatenate((state["observation"],
-                                    state["achieved_goal"],
-                                    state["desired_goal"])).reshape((1,-1)) - xm)/xs)
+    error = ae.error((np.concatenate((state[1], state[2]), -1)))
     #print("predicted error", error)
 
     if not take_max:
@@ -82,13 +76,11 @@ def get_active_exp(env, threshold, ae, xm, xs, render, take_max = False, max_act
         while not error > threshold*err_avg:
             tried+=1
             state = env.reset()
-            state = robot_reset(env)
-            error = ae.error((np.concatenate((state["observation"],
-                                            state["achieved_goal"],
-                                            state["desired_goal"])).reshape((1,-1)) - xm)/xs)
+        #    state = robot_reset(env)
+            error = ae.error((np.concatenate((state[1], state[2]), -1)))
       #      print("predicted error", error.numpy(), err_avg.numpy())
      #   print("Tried ", tried, " initial states")
-        new_states, new_acts = man_controller.get_demo(env, state, CTRL_NORM, render)
+        new_states, new_acts = man_controller.get_demo_cam2(env, state, CTRL_NORM, render)
 
         return new_states, new_acts
 
@@ -96,10 +88,8 @@ def get_active_exp(env, threshold, ae, xm, xs, render, take_max = False, max_act
         errs_states = []
         for k in range(max_act_steps):
             state = env.reset()
-            state = robot_reset(env)
-            error = ae.error((np.concatenate((state["observation"],
-                                            state["achieved_goal"],
-                                            state["desired_goal"])).reshape((1,-1)) - xm)/xs)
+            #state = robot_reset(env)
+            error = ae.error((np.concatenate((state[1], state[2]), -1)))
             s, g = utils.save_state(env)
             errs_states.append([s, g, error])
 
@@ -110,10 +100,10 @@ def get_active_exp(env, threshold, ae, xm, xs, render, take_max = False, max_act
                 max_error = errs_states[el][2]
                 max_key = el
 
-        new_env = utils.set_state(env, errs_states[max_key][0], errs_states[max_key][1])
+        new_env = utils.set_state(env.env, errs_states[max_key][0], errs_states[max_key][1])
         state, *_ = new_env.step(np.zeros(4))
 
-        new_states, new_acts = man_controller.get_demo(new_env, state, CTRL_NORM, render)
+        new_states, new_acts = man_controller.get_demo(new_env.env, state, CTRL_NORM, render)
 
         return new_states, new_acts
 
@@ -124,19 +114,20 @@ def go(seed, file):
     else:
         tf.random.set_seed(seed)
     env = gym.make("FetchPickAndPlace-v1")
+    env = CameraRobot(env)
     env.seed(seed)
     np.random.seed(seed)
     test_set = []
     for i in range(TEST_EPS):
         state = env.reset()
-        state = robot_reset(env)
-        state, goal = utils.save_state(env)
+    #    state = robot_reset(env)
+        state, goal = utils.save_state(env.env)
         test_set.append((state, goal))
 
     states, actions = get_experience(INITIAL_TRAIN_EPS, env)
     print("Normal states, actions ", len(states), len(actions))
 
-    net = model.BCModel(states[0].shape[0], actions[0].shape[0], BC_HD, BC_HL, BC_LR, set_seed = seed)
+    net = model.ConvHybridNet(50, actions[0].shape[0], BC_HD, BC_HL, BC_LR, set_seed = seed)
 
     x = np.array(states)
     xm = x.mean()
@@ -148,10 +139,8 @@ def go(seed, file):
     ast = a.std()
     a = (a - a.mean())/a.std()
 
-    start = time.time()
     net.train(x, a, BC_BS, BC_EPS)
-    print("Training took:")
-    print(time.time() - start)
+
     result_t = test(net, test_set, env, xm, xs, am, ast, RENDER_TEST)
     print("Normal learning results ", seed, " : ", result_t)
     file.write(str("Normal learning results " + str(seed) + " : " + str(result_t)))
@@ -169,7 +158,6 @@ def go(seed, file):
     #get_experience(int(INITIAL_TRAIN_EPS*ORG_TRAIN_SPLIT), env)
     act_l_loops = math.ceil(((1.-ORG_TRAIN_SPLIT)*INITIAL_TRAIN_EPS)//ACTIVE_STEPS_RETRAIN)
     if act_l_loops == 0: act_l_loops+=1
-    ae = DAE(31, AE_HD, AE_HL, AE_LR, set_seed = seed)
     for i in range(act_l_loops):
 
         x = np.array(states)
@@ -177,7 +165,7 @@ def go(seed, file):
         xs = x.std()
         x = (x - x.mean())/x.std()
 
-        if AE_RESTART: ae = DAE(31, AE_HD, AE_HL, AE_LR, set_seed = seed)
+        ae = RandomNetwork(31, AE_HD, AE_HL, AE_LR, set_seed = seed)
 
         ae.train(x, AE_BS, AE_EPS)
 
@@ -221,5 +209,4 @@ if __name__ == "__main__":
             print(str(k))
             file.write("\n" + str(k))
             file.write("\n\n")
-            with tf.device("/device:CPU:0"):
-                go(k, file)
+            go(k, file)

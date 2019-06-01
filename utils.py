@@ -10,3 +10,5 @@ def set_state(env, state, goal):
     env.env.sim.set_state(state)
     env.env.goal = goal
     return env
+
+get_state = save_state

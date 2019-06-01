@@ -118,55 +118,6 @@ def go(seed, file):
     print("Normal learning results ", seed, " : ", result_t)
     file.write(str("Normal learning results " + str(seed) + " : " + str(result_t)))
     
-    """## Active Learning Part ###
-    if not tf.__version__ == "2.0.0-alpha0":
-        tf.random.set_random_seed(seed)
-    else: 
-        tf.random.set_seed(seed)
-    env = gym.make("FetchPickAndPlace-v1")
-    env.seed(seed)
-    
-    #states, actions = states[:math.floor(len(states)*ORG_TRAIN_SPLIT)], actions[:math.floor(len(actions)*ORG_TRAIN_SPLIT)]
-    get_experience(int(INITIAL_TRAIN_EPS*ORG_TRAIN_SPLIT), env)
-  
-    for i in range(int(((1.-ORG_TRAIN_SPLIT)*INITIAL_TRAIN_EPS)//ACTIVE_STEPS_RETRAIN)):
-    
-        x = np.array(states)
-        xm = x.mean()
-        xs = x.std()
-        x = (x - x.mean())/x.std()
-
-        ae = DAE(31, AE_HD, AE_HL, AE_LR, set_seed = seed)
-
-        ae.train(x, AE_BS, AE_EPS)
-
-        for j in range(ACTIVE_STEPS_RETRAIN):
-            new_s, new_a = get_active_exp(env, ACTIVE_ERROR_THR, ae, xm, xs, False)
-            states+=new_s
-            actions+=new_a
-        
-    x = np.array(states)
-    xm = x.mean()
-    xs = x.std()
-    x = (x - x.mean())/x.std()
-    
-    a = np.array(actions)
-    am = a.mean()
-    ast = a.std()
-    a = (a - a.mean())/a.std()
-    
-    print("Active states, actions ", len(states), len(actions))
-    
-    net = model.BCModel(states[0].shape[0], actions[0].shape[0], BC_HD, BC_HL, BC_LR, set_seed = seed)
-    net.train(x, a, BC_BS, BC_EPS)
-
-    result_t = test(net, test_set, env, xm, xs, am, ast, False)
-    print("Active learning results ", seed, " : ", result_t)
-    file.write(str("Active learning results " + str(seed) + " : " + str(result_t)))
-    
-    #print("Active learning results ", seed, " : ",test(net, test_set, env, xm, xs, am, ast, True))
-
-    """   
 
 
 if __name__ == "__main__":
