@@ -11,7 +11,7 @@ from ae import *
 import man_controller
 import utils
 
-hyperp = {"INITIAL_TRAIN_EPS" : 30,
+hyperp = {"INITIAL_TRAIN_EPS" : 70,
 
 "BC_LR" : 1e-3,
 "BC_HD" : 128,
@@ -20,14 +20,15 @@ hyperp = {"INITIAL_TRAIN_EPS" : 30,
 "BC_EPS" : 400,
 
 "AE_HD" : 8,
-"AE_HL" : 1,
-"AE_LR" : 1e-2,
+"AE_HL" : 2,
+"AE_LR" : 1e-3,
 "AE_BS" : 64,
-"AE_EPS" : 20,
+"AE_EPS" : 10,
 
 "TEST_EPS" : 100,
 "ACTIVE_STEPS_RETRAIN" : 10,
 "ACTIVE_ERROR_THR" : 1.5,
+"ERROR_THR_PRED" : 3,
 
 "ORG_TRAIN_SPLIT" : 1.,
 "FULL_TRAJ_ERROR" : True,
@@ -55,6 +56,7 @@ ACTIVE_ERROR_THR = hyperp["ACTIVE_ERROR_THR"]
 
 ORG_TRAIN_SPLIT = hyperp["ORG_TRAIN_SPLIT"]
 RENDER_TEST = hyperp["RENDER_TEST"]
+ERROR_THR_PRED = hyperp["ERROR_THR_PRED"]
 
 #from hparams import *
 
@@ -165,7 +167,7 @@ def predict(model, ae, test_set, env, xm, xs, am, ast, tot_error_trainset):
                 error = ae.error((np.concatenate((state["observation"],
                                             state["achieved_goal"],
                                             state["desired_goal"])).reshape((1,-1)) - xm)/xs)
-                if error > 1.5*tot_error_trainset:
+                if error > ERROR_THR_PRED*tot_error_trainset:
                     #print("Error became too high.")
                     prediction = "failure"
          #   print(action)
@@ -259,8 +261,8 @@ def go(seed):
 
     net.train(x, a, BC_BS, BC_EPS)
 
-    #ae = AE(31, AE_HD, AE_HL, AE_LR)
-    ae = RandomNetwork(1, AE_HD, AE_HL, AE_LR)
+    ae = AE(31, AE_HD, AE_HL, AE_LR)
+    #ae = RandomNetwork(1, AE_HD, AE_HL, AE_LR)
 
     ae.train(x, AE_BS, AE_EPS)
 
@@ -297,11 +299,14 @@ def go(seed):
 
     #change to consider failures
     succ_tp, succ_fp, succ_tn, succ_fn = succ_tn, succ_fn, succ_tp, succ_fp
+    fail, succ = succ, fail
 
     print("succ tp, fp, tn, fn", succ_tp, succ_fp, succ_tn, succ_fn)
     precision = (succ_tp/(succ_tp+succ_fp + 0.001))
     recall = (succ_tp/(succ_tp+succ_fn))
     print("F1 score", (2*precision*recall/(precision + recall)))
+    print("F1 for all positives",  (2*(succ/(succ + fail))*1/((succ/(succ + fail)) + 1)))
+    return (2*precision*recall/(precision + recall)), 2*(succ/(succ + fail))*1/((succ/(succ + fail)) + 1)
 
 
 
@@ -310,9 +315,18 @@ if __name__ == "__main__":
     filename = "logs/counterrors" + strftime("%Y-%m-%d %H:%M:%S", gmtime()) + ".txt"
     print(filename)
     with open(filename, "a+") as file:
-        for k in range(30):
+        f1s = 0
+        f1s_base = 0
+        for k in range(5):
             print(str(hyperp))
             print(str(k))
             file.write(str(hyperp))
             file.write("\n\n")
-            go(k)
+            with tf.device("/device:CPU:0"):
+                f1s_i, f1s_base_i = go(k)
+                f1s += f1s_i
+                f1s_base += f1s_base_i
+        print("Average F1", f1s/5)
+        file.write("Average F1 " + str(f1s/5))
+        print("Average F1 baseline", f1s_base/5)
+        file.write("Average F1 " + str(f1s_base/5))

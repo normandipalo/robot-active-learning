@@ -120,7 +120,8 @@ class DAE(tf.keras.Model):
     def train_step(self, el, print_loss = False, verbose = False):
         with tf.GradientTape() as tape:
             x = el
-            y_pred = self.call(x)
+            x_n = x + tf.cast(tf.random.normal(shape = x.shape)*0.1, tf.float64)
+            y_pred = self.call(x_n)
             loss = self._loss(y_pred, x)
         grads = tape.gradient(loss, self.variables)
         self.opt.apply_gradients(zip(grads, self.variables))
