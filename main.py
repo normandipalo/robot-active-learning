@@ -177,7 +177,7 @@ def go(seed, file):
         xs = x.std()
         x = (x - x.mean())/x.std()
 
-        if AE_RESTART: ae = DAE(31, AE_HD, AE_HL, AE_LR, set_seed = seed)
+        #if AE_RESTART: ae = DAE(31, AE_HD, AE_HL, AE_LR, set_seed = seed)
 
         start = time.time()
         ae.train(x, AE_BS, AE_EPS)

@@ -17,7 +17,7 @@ class BCModel(tf.keras.Model):
         self.opt = tf.keras.optimizers.Adam(learning_rate = lr)
 
 
-#    @tf.function
+    @tf.function
     def call(self, x):
         for l in self._layers:
             x = l(x)
@@ -36,7 +36,6 @@ class BCModel(tf.keras.Model):
         ds = ds.batch(batch_size)
         return ds
 
-#    @tf.function
     def train(self, x, y, batch_size, epochs, print_loss = False, verbose = False):
         if self.set_seed:
             tf.random.set_seed(self.set_seed)
@@ -48,7 +47,7 @@ class BCModel(tf.keras.Model):
                 if i%1000==0: print("Element ", i)
             self.train_step(el, print_loss, verbose)
 
-#    @tf.function
+    @tf.function
     def train_step(self, el, print_loss = False, verbose = False):
         with tf.GradientTape() as tape:
             x, y = el
@@ -132,10 +131,11 @@ class ConvHybridNet(tf.keras.Model):
             self.set_seed = None
 
         super(ConvHybridNet, self).__init__()
+        self.im_size = im_size
         self._commonlayers = []
         for _ in range(len(common_filters)):
             self._commonlayers.append(tf.keras.layers.Conv2D(kernel_size = k_sizes[_], filters = common_filters[_],
-                                                        activation = "relu", strides = 2, padding = "same"))
+                                                        activation = "relu", strides = 1, padding = "same"))
         #    self._layers.append(tf.keras.layers.BatchNormalization())
 
         self._actlayers = []
@@ -150,9 +150,11 @@ class ConvHybridNet(tf.keras.Model):
                                                     strides = 1, padding = "same"))
         self.opt = tf.keras.optimizers.Adam(learning_rate = lr)
 
+    @tf.function
     def call(self, x):
         for l in self._commonlayers:
             x = l(x)
+            x = tf.keras.layers.MaxPool2D(pool_size = (2,2))(x)
         encoded = x
 
 
@@ -166,9 +168,10 @@ class ConvHybridNet(tf.keras.Model):
             x = l(x)
             x = tf.keras.layers.UpSampling2D()(x) if i != len(self._delayers) - 1 else x
 
-        pad = x.shape[1] - 50
+        pad = x.shape[1] - self.im_size
         return actions, x[:,pad//2:x.shape[1] - pad//2, pad//2:x.shape[1]-pad//2,:]
 
+    @tf.function
     def _loss(self, x, y):
         return tf.reduce_mean(tf.losses.mean_squared_error(y, x)) #.mean_squared_error(y, x)
 
@@ -182,6 +185,7 @@ class ConvHybridNet(tf.keras.Model):
         ds = ds.batch(batch_size)
         return ds
 
+    @tf.function
     def error(self, x):
         a, x_hat = self.call(x)
         return tf.reduce_mean(tf.losses.mean_squared_error(x, x_hat))
@@ -193,11 +197,15 @@ class ConvHybridNet(tf.keras.Model):
         for i, el in enumerate(ds):
             if verbose:
                 if i%1000==0: print("Element ", i)
-            with tf.GradientTape() as tape:
-                x, y = el
-                y_pred, x_pred = self.call(x)
-                loss = self._loss(y_pred, y)
-                loss += self._loss(x_pred, x)
-            grads = tape.gradient(loss, self.variables)
-            self.opt.apply_gradients(zip(grads, self.variables))
-            if print_loss: print(loss)
+            self.train_step(el, print_loss, verbose)
+
+    @tf.function
+    def train_step(self, el, print_loss = False, verbose = False):
+        with tf.GradientTape() as tape:
+            x, y = el
+            y_pred, x_pred = self.call(x)
+            loss = self._loss(y_pred, y)
+            loss += self._loss(x_pred, x)
+        grads = tape.gradient(loss, self.variables)
+        self.opt.apply_gradients(zip(grads, self.variables))
+        if print_loss: print(loss)

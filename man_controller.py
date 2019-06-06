@@ -106,11 +106,10 @@ def get_demo_cam2(env, c_state, norm = False, render = False):
     picked = [False]
     for i in range(200):
         action, steps = controller(state[0], picked, norm)
-        print(steps)
         for s in range(steps):
             #Concat im rgb and depth.
-            states.append(np.concatenate((state[1], state[2]), -1))
-            new_state, *_ = env.step(action)
+            states.append(np.concatenate((state[1], state[2][:,:,None]), -1))
+            new_state, _, _, _ = env.step(action)
             if render: env.render()
             actions.append(action)
             state = new_state

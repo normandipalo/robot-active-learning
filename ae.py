@@ -18,19 +18,19 @@ class AE(tf.keras.Model):
         self.opt = tf.keras.optimizers.Adam(learning_rate = lr)
 
 
-#    @tf.function
+    @tf.function
     def call(self, x):
         for l in self._layers:
             x = l(x)
         return x
 
-    #@tf.function
+    @tf.function
     def error(self, x):
         y = self.call(x)
         return tf.reduce_sum(tf.losses.mean_squared_error(y,x))
 
 
-    #@tf.function
+    @tf.function
     def _loss(self, x, y):
         return tf.reduce_mean(tf.losses.mean_squared_error(y, x)) #.mean_squared_error(y, x)
 
@@ -53,7 +53,7 @@ class AE(tf.keras.Model):
                 if i%1000==0: print("Element ", i)
             self.train_step(el, print_loss, verbose)
 
-#    @tf.function
+    @tf.function
     def train_step(self, el, print_loss = False, verbose = False):
         with tf.GradientTape() as tape:
             x = el
@@ -81,19 +81,19 @@ class DAE(tf.keras.Model):
         self.opt = tf.keras.optimizers.Adam(learning_rate = lr)
 
 
-    #@tf.function
+    @tf.function
     def call(self, x):
         for l in self._layers:
             x = l(x)
         return x
 
-    #@tf.function
+    @tf.function
     def error(self, x):
         y = self.call(x)
         return tf.reduce_sum(tf.losses.mean_squared_error(y,x))
 
 
-    #@tf.function
+    @tf.function
     def _loss(self, x, y):
         return tf.reduce_mean(tf.losses.mean_squared_error(y, x)) #.mean_squared_error(y, x)
 
@@ -114,14 +114,17 @@ class DAE(tf.keras.Model):
         for i,el in enumerate(ds):
             if verbose:
                 if i%1000==0: print("Element ", i)
-            with tf.GradientTape() as tape:
-                x = el
-                x_n = x + np.random.randn(*el.shape)*0.35
-                y_pred = self.call(x_n)
-                loss = self._loss(y_pred, x)
-            grads = tape.gradient(loss, self.variables)
-            self.opt.apply_gradients(zip(grads, self.variables))
-            if print_loss: print(loss)
+            self.train_step(el, print_loss, verbose)
+
+    @tf.function
+    def train_step(self, el, print_loss = False, verbose = False):
+        with tf.GradientTape() as tape:
+            x = el
+            y_pred = self.call(x)
+            loss = self._loss(y_pred, x)
+        grads = tape.gradient(loss, self.variables)
+        self.opt.apply_gradients(zip(grads, self.variables))
+        if print_loss: print(loss)
 
 
 

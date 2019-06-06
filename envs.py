@@ -1,9 +1,11 @@
 import gym
 import numpy as np
+import cv2
 
 class CameraRobot():
-    def __init__(self, env):
+    def __init__(self, env, im_dim):
         self.env = env
+        self.im_dim = im_dim
     #    self.env.env.render(mode = "rgb_array")
 
     def step(self, act):
@@ -15,7 +17,8 @@ class CameraRobot():
         s = self.env.env.viewer.sim.render(50, 50, camera_name = 'external_camera_0')[::-1,:,:].astype(np.float64)/255.
         a, d = self.env.env.sim.render(50, 50, depth = True, camera_name = 'external_camera_0')
         d = d[::-1,:].astype(np.float64)[:,:,None]
-        return (state, s, d), 0, False, ""
+        return (state, cv2.resize(s[16:44,:,:], (self.im_dim, self.im_dim)), cv2.resize(d[16:44,:,:], (self.im_dim,self.im_dim))), \
+                0, False, ""
 
     def reset(self):
         state = self.env.reset()
@@ -29,7 +32,7 @@ class CameraRobot():
 
         d = d[::-1,:].astype(np.float64)[:,:,None]
 #        self.env.render()
-        return (state, s, d)
+        return (state, cv2.resize(s[16:44,:,:], (self.im_dim, self.im_dim)), cv2.resize(d[16:44,:,:], (self.im_dim, self.im_dim)))
 
     def seed(self, seed):
         self.env.seed(seed)
