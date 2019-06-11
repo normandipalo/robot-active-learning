@@ -59,3 +59,10 @@ target/
 
 #logs
 /logs
+
+
+actions.npy
+states.npy
+.ipynb_checkpoints/
+MUJOCO_LOG.TXT
+
