@@ -20,7 +20,7 @@ hyperp = {"INITIAL_TRAIN_EPS" : 10,
 "FULL_TRAJ_ERROR" : False,
 "CTRL_NORM" : True,
 "RENDER_TEST" : False,
-"RENDER_ACT_EXP" : False,
+"RENDER_ACT_EXP" : True,
 "TAKE_MAX" : True,
 "AE_RESTART" : True,
 "MAX_ACT_STEPS" : 100}

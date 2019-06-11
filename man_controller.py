@@ -85,6 +85,20 @@ def get_demo_cam(env, c_state, norm = False, render = False, depth = False):
 def get_demo(env, state, norm = False, render = False):
     states, actions = [], []
     picked = [False]
+    """cube_pos = state["achieved_goal"]
+    robot_pos = state["observation"][:3]
+    diff = cube_pos - robot_pos
+    if diff[2] > 0.:
+        #If the robot starts with end effector below cube, start by going up.
+        #(avoids collision)
+        for i in range(10):
+            states.append(np.concatenate((state["observation"],
+                                        state["achieved_goal"],
+                                        state["desired_goal"])))
+            new_state, *_ = env.step(np.array([0.,0.,1.,0.]))
+            if render: env.render()
+            actions.append(np.array([0.,0.,1.,0.]))
+            state = new_state"""
     for i in range(200):
         action, steps = controller(state, picked, norm)
         for s in range(steps):

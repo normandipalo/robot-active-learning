@@ -162,13 +162,14 @@ def predict(model, ae, test_set, env, xm, xs, am, ast, tot_error_trainset):
 
             action = action*ast + am
             new_state, *_ = env.step(action[0])
+            if RENDER_TEST: env.render()
             if FULL_TRAJ:
                 # Checks at every step if the error becomes too high.
                 error = ae.error((np.concatenate((state["observation"],
                                             state["achieved_goal"],
                                             state["desired_goal"])).reshape((1,-1)) - xm)/xs)
                 if error > ERROR_THR_PRED*tot_error_trainset:
-                    #print("Error became too high.")
+                #    print("Error became too high.")
                     prediction = "failure"
          #   print(action)
 
@@ -186,7 +187,7 @@ def predict(model, ae, test_set, env, xm, xs, am, ast, tot_error_trainset):
                 break
 
                 #divide by number of steps to get an average
-
+    #    if FULL_TRAJ: print("End \n \n \n")
         if not succeded:
             failures += 1
             if prediction == "failure":

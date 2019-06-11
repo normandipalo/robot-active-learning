@@ -20,8 +20,8 @@ def get_experience(eps, env):
     states, actions = [], []
     for ep in range(eps):
         state = env.reset()
-        state_, goal = utils.save_state(env)
-        test_set.append((state_, goal))
+    #    state_, goal = utils.save_state(env)
+    #    test_set.append((state_, goal))
         new_states, new_acts = man_controller.get_demo_cam2(env, state, norm = True)
         states+=new_states
         actions+=new_acts
@@ -86,21 +86,21 @@ def go(seed, file):
         tf.random.set_random_seed(seed)
     else:
         tf.random.set_seed(seed)
-    env = CameraRobot(gym.make("FetchPickAndPlace-v1"), 25)
+    env = CameraRobot(gym.make("FetchPickAndPlace-v1"), 50)
     env.seed(seed)
-    """test_set = []
+    test_set = []
     for i in range(20):
         state = env.reset()
         state, goal = utils.save_state(env)
         test_set.append((state, goal))
-    """
-    states, actions = get_experience(10, env)
+
+    states, actions = get_experience(400, env)
     print("new states :", np.array(states).shape)
     print("Normal states, actions ", len(states), len(actions))
 
-    net = model.ConvHybridNet(25, 4, 4, 4, [5,5,3,], [32,64, 128], [128, 32, 16], 0.001)
+    net = model.ConvHybridNet(50, 4, 4, 4, [5,3,3,3], [16,32,64,128], [128, 32, 16, 16], 0.001)
     start = time.time()
-    net.train(np.array(states), actions, 8, 400, print_loss = True)
+    net.train(np.array(states), actions, 16, 100, print_loss = True)
     print("took ", str(time.time() - start))
     result_t = test(net, test_set, env, 0, 1, 0, 1, False)
     print("Normal learning results ", seed, " : ", result_t)

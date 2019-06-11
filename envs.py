@@ -17,7 +17,8 @@ class CameraRobot():
         s = self.env.env.viewer.sim.render(50, 50, camera_name = 'external_camera_0')[::-1,:,:].astype(np.float64)/255.
         a, d = self.env.env.sim.render(50, 50, depth = True, camera_name = 'external_camera_0')
         d = d[::-1,:].astype(np.float64)[:,:,None]
-        return (state, cv2.resize(s[16:44,:,:], (self.im_dim, self.im_dim)), cv2.resize(d[16:44,:,:], (self.im_dim,self.im_dim))), \
+        #return (state, cv2.resize(s[16:44,:,:], (self.im_dim, self.im_dim)), cv2.resize(d[16:44,:,:], (self.im_dim,self.im_dim))), \
+        return (state, cv2.resize(s, (self.im_dim, self.im_dim)), cv2.resize(d, (self.im_dim,self.im_dim))), \
                 0, False, ""
 
     def reset(self):
@@ -32,7 +33,8 @@ class CameraRobot():
 
         d = d[::-1,:].astype(np.float64)[:,:,None]
 #        self.env.render()
-        return (state, cv2.resize(s[16:44,:,:], (self.im_dim, self.im_dim)), cv2.resize(d[16:44,:,:], (self.im_dim, self.im_dim)))
+        #return (state, cv2.resize(s[16:44,:,:], (self.im_dim, self.im_dim)), cv2.resize(d[16:44,:,:], (self.im_dim, self.im_dim)))
+        return (state, cv2.resize(s, (self.im_dim, self.im_dim)), cv2.resize(d, (self.im_dim, self.im_dim)))
 
     def seed(self, seed):
         self.env.seed(seed)

@@ -1,5 +1,6 @@
 import tensorflow as tf
 import numpy as np
+from utils import *
 
 class AE(tf.keras.Model):
     def __init__(self, in_size, hidden_dim, hid_layers, lr, set_seed = None):
@@ -12,6 +13,7 @@ class AE(tf.keras.Model):
         self._layers = []
         self._layers.append(tf.keras.layers.Dense(input_shape = [in_size],  units = hidden_dim, activation = "relu"))
         for i in range(hid_layers):
+            self._layers.append(LayerNorm(hidden_dim))
             self._layers.append(tf.keras.layers.Dense(hidden_dim, activation = "relu"))
         self._layers.append(tf.keras.layers.Dense(in_size))
 
@@ -144,7 +146,7 @@ class RandomNetwork(tf.keras.Model):
         self._layers = []
 
         for i in range(4):
-            self.r_layers.append(tf.keras.layers.Dense(units = 512, activation = "tanh"))
+            self.r_layers.append(tf.keras.layers.Dense(units = 128, activation = "relu"))
         self.r_layers.append(tf.keras.layers.Dense(units = out_size))
 
         for l in self.r_layers:
