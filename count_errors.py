@@ -231,10 +231,10 @@ def get_active_exp(env, threshold, ae, xm, xs, render):
 
 
 def go(seed):
-    if not tf.__version__ == "2.0.0-alpha0":
+    """if not tf.__version__ == "2.0.0-beta0":
         tf.random.set_random_seed(seed)
-    else:
-        tf.random.set_seed(seed)
+    else:"""
+    tf.random.set_seed(seed)
     env = gym.make("FetchPickAndPlace-v1")
     env.seed(seed)
 
@@ -250,14 +250,14 @@ def go(seed):
     net = model.BCModel(states[0].shape[0], actions[0].shape[0], BC_HD, BC_HL, BC_LR)
 
     x = np.array(states)
-    xm = x.mean()
-    xs = x.std()
-    x = (x - x.mean())/x.std()
+    xm = x.mean(axis = 0)
+    xs = x.std(axis = 0) + 1e-4
+    x = (x - xm)/xs
 
     a = np.array(actions)
-    am = a.mean()
-    ast = a.std()
-    a = (a - a.mean())/a.std()
+    am = a.mean(axis = 0)
+    ast = a.std(axis = 0) + 1e-4
+    a = (a - am)/ast
 
     net.train(x, a, BC_BS, BC_EPS)
 
@@ -302,10 +302,13 @@ def go(seed):
     fail, succ = succ, fail
 
     print("succ tp, fp, tn, fn", succ_tp, succ_fp, succ_tn, succ_fn)
+    file.write(str("succ tp, fp, tn, fn") + str((succ_tp, succ_fp, succ_tn, succ_fn)))
     precision = (succ_tp/(succ_tp+succ_fp + 0.001))
     recall = (succ_tp/(succ_tp+succ_fn))
     print("F1 score", (2*precision*recall/(precision + recall)))
     print("F1 for all positives",  (2*(succ/(succ + fail))*1/((succ/(succ + fail)) + 1)))
+    file.write("F1 score: " + str((2*precision*recall/(precision + recall))))
+    file.write("F1 for all positives: " + str((2*(succ/(succ + fail))*1/((succ/(succ + fail)) + 1))))
     return (2*precision*recall/(precision + recall)), 2*(succ/(succ + fail))*1/((succ/(succ + fail)) + 1)
 
 

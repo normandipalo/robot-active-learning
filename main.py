@@ -119,10 +119,10 @@ def get_active_exp(env, threshold, ae, xm, xs, render, take_max = False, max_act
 
 
 def go(seed, file):
-    if not tf.__version__ == "2.0.0-alpha0":
+    """if not tf.__version__ == "2.0.0-beta0":
         tf.random.set_random_seed(seed)
-    else:
-        tf.random.set_seed(seed)
+    else:"""
+    tf.random.set_seed(seed)
     env = gym.make("FetchPickAndPlace-v1")
     env.seed(seed)
     np.random.seed(seed)
@@ -139,14 +139,14 @@ def go(seed, file):
     net = model.BCModel(states[0].shape[0], actions[0].shape[0], BC_HD, BC_HL, BC_LR, set_seed = seed)
 
     x = np.array(states)
-    xm = x.mean()
-    xs = x.std()
-    x = (x - x.mean())/x.std()
+    xm = x.mean(axis = 0)
+    xs = x.std(axis = 0) + 1e-4
+    x = (x - xm)/xs
 
     a = np.array(actions)
-    am = a.mean()
-    ast = a.std()
-    a = (a - a.mean())/a.std()
+    am = a.mean(axis = 0)
+    ast = a.std(axis = 0) + 1e-4
+    a = (a - am)/ast
 
     start = time.time()
     net.train(x, a, BC_BS, BC_EPS)
@@ -157,7 +157,7 @@ def go(seed, file):
     file.write(str("Normal learning results " + str(seed) + " : " + str(result_t)))
 
     ## Active Learning Part ###
-    if not tf.__version__ == "2.0.0-alpha0":
+    if not tf.__version__ == "2.0.0-beta0":
         tf.random.set_random_seed(seed)
     else:
         tf.random.set_seed(seed)
@@ -169,15 +169,15 @@ def go(seed, file):
     #get_experience(int(INITIAL_TRAIN_EPS*ORG_TRAIN_SPLIT), env)
     act_l_loops = math.ceil(((1.-ORG_TRAIN_SPLIT)*INITIAL_TRAIN_EPS)//ACTIVE_STEPS_RETRAIN)
     if act_l_loops == 0: act_l_loops+=1
-    ae = DAE(31, AE_HD, AE_HL, AE_LR, set_seed = seed)
+    ae = AE(31, AE_HD, AE_HL, AE_LR, set_seed = seed)
     for i in range(act_l_loops):
 
         x = np.array(states)
-        xm = x.mean()
-        xs = x.std()
-        x = (x - x.mean())/x.std()
+        xm = x.mean(axis = 0)
+        xs = x.std(axis = 0) + 1e-4
+        x = (x - xm)/xs
 
-        #if AE_RESTART: ae = DAE(31, AE_HD, AE_HL, AE_LR, set_seed = seed)
+        if AE_RESTART: ae = AE(31, AE_HD, AE_HL, AE_LR, set_seed = seed)
 
         start = time.time()
         ae.train(x, AE_BS, AE_EPS)
@@ -190,14 +190,14 @@ def go(seed, file):
             actions+=new_a
 
     x = np.array(states)
-    xm = x.mean()
-    xs = x.std()
-    x = (x - x.mean())/x.std()
+    xm = x.mean(axis = 0)
+    xs = x.std(axis = 0) + 1e-4
+    x = (x - xm)/xs
 
     a = np.array(actions)
-    am = a.mean()
-    ast = a.std()
-    a = (a - a.mean())/a.std()
+    am = a.mean(axis = 0)
+    ast = a.std(axis = 0) + 1e-4
+    a = (a - am)/ast
 
     print("Active states, actions ", len(states), len(actions))
 
@@ -220,9 +220,18 @@ if __name__ == "__main__":
     with open(filename, "a+") as file:
         print(str(hyperp))
         file.write(str(hyperp))
-        for k in range(0,50):
-            print(str(k))
-            file.write("\n" + str(k))
-            file.write("\n\n")
-            with tf.device("/device:CPU:0"):
-                go(k, file)
+        for AE_RESTART in [False, True]:
+            for AE_EPS in [5,10,20]:
+                for INITIAL_TRAIN_EPS in [30,50,20]:
+                    print(AE_RESTART)
+                    file.write(str(AE_RESTART) + "\n")
+                    print(AE_EPS)
+                    file.write(str(AE_EPS) + "\n")
+                    print(INITIAL_TRAIN_EPS)
+                    file.write(str(INITIAL_TRAIN_EPS) + "\n")
+                    for k in range(0,20):
+                        print(str(k))
+                        file.write("\n" + str(k))
+                        file.write("\n\n")
+                        with tf.device("/device:CPU:0"):
+                            go(k, file)
