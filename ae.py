@@ -18,19 +18,22 @@ class AE(tf.keras.Model):
         self.opt = tf.keras.optimizers.Adam(learning_rate = lr)
 
 
-    @tf.function
+#    @tf.function
     def call(self, x):
         for l in self._layers:
             x = l(x)
         return x
 
-    @tf.function
-    def error(self, x):
+#    @tf.function
+    def error(self, x, norm = False):
         y = self.call(x)
-        return tf.reduce_sum(tf.losses.mean_squared_error(y,x))
+        error = tf.losses.mean_squared_error(y,x)
+        if norm:
+            error = tf.losses.mean_squared_error(y,x)/tf.linalg.norm(x)
+        return tf.reduce_sum(error)
 
 
-    @tf.function
+#    @tf.function
     def _loss(self, x, y):
         return tf.reduce_mean(tf.losses.mean_squared_error(y, x)) #.mean_squared_error(y, x)
 
@@ -53,7 +56,7 @@ class AE(tf.keras.Model):
                 if i%1000==0: print("Element ", i)
             self.train_step(el, print_loss, verbose)
 
-    @tf.function
+#    @tf.function
     def train_step(self, el, print_loss = False, verbose = False):
         with tf.GradientTape() as tape:
             x = el
@@ -88,9 +91,13 @@ class DAE(tf.keras.Model):
         return x
 
     @tf.function
-    def error(self, x):
+    def error(self, x, norm = False):
         y = self.call(x)
-        return tf.reduce_sum(tf.losses.mean_squared_error(y,x))
+        error = tf.losses.mean_squared_error(y,x)
+        if norm:
+            error = tf.losses.mean_squared_error(y,x)/tf.linalg.norm(x)
+            print("norm")
+        return tf.reduce_sum(error)
 
 
     @tf.function
