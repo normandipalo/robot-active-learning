@@ -1,4 +1,4 @@
-hyperp = {"INITIAL_TRAIN_EPS" : 10,
+hyperp = {"INITIAL_TRAIN_EPS" : 30,
 
 "BC_LR" : 1e-3,
 "BC_HD" : 128,
@@ -13,7 +13,7 @@ hyperp = {"INITIAL_TRAIN_EPS" : 10,
 "AE_EPS" : 10,
 
 "TEST_EPS" : 100,
-"ACTIVE_STEPS_RETRAIN" : 1,
+"ACTIVE_STEPS_RETRAIN" : 3,
 "ACTIVE_ERROR_THR" : 1.15,
 
 "ORG_TRAIN_SPLIT" : .5,
