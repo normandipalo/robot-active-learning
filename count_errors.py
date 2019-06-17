@@ -262,7 +262,6 @@ def go(seed):
     net.train(x, a, BC_BS, BC_EPS)
 
     ae = AE(31, AE_HD, AE_HL, AE_LR)
-    #ae = RandomNetwork(1, AE_HD, AE_HL, AE_LR)
 
     ae.train(x, AE_BS, AE_EPS)
 
