@@ -1,5 +1,5 @@
 import tensorflow as tf
-from tensorflow.config.gpu import *
+#from tensorflow.config.gpu import *
 import gym
 import numpy as np
 import math
@@ -20,8 +20,8 @@ def get_experience(eps, env):
     states, actions = [], []
     for ep in range(eps):
         state = env.reset()
-        state_, goal = utils.save_state(env)
-        test_set.append((state_, goal))
+    #    state_, goal = utils.save_state(env)
+    #    test_set.append((state_, goal))
         new_states, new_acts = man_controller.get_demo_cam2(env, state, norm = True)
         states+=new_states
         actions+=new_acts
@@ -35,6 +35,8 @@ def test(model, test_set, env, xm, xs, am, ast, render = False):
         env.reset()
         env = utils.set_state(env, test_set[i][0], test_set[i][1])
         state, *_ = env.step([0.,0.,0.,0.])
+
+        print("Error ", model.error(np.concatenate((state[1], state[2][:,:,None]), -1)[None,:,:,:]))
         picked = [False]
         for i in range(200):
             action = model(np.concatenate((state[1], state[2][:,:,None]), -1)[None,:,:,:])[0]
@@ -51,7 +53,7 @@ def test(model, test_set, env, xm, xs, am, ast, render = False):
 
                 break
         if not succeded:
-       #     print("FAILURE")
+            print("FAILURE")
             failures+=1
     return successes, failures
 
@@ -82,25 +84,27 @@ def get_active_exp(env, threshold, ae, xm, xs, render):
 
 def go(seed, file):
     global test_set
-    if not tf.__version__ == "2.0.0-alpha0":
-        tf.random.set_random_seed(seed)
-    else:
-        tf.random.set_seed(seed)
-    env = CameraRobot(gym.make("FetchPickAndPlace-v1"), 25)
+#    if not tf.__version__ == "2.0.0-beta0":
+#        tf.random.set_random_seed(seed)
+#    else:
+    tf.random.set_seed(seed)
+    env = CameraRobot(gym.make("FetchPickAndPlace-v1"), 50)
     env.seed(seed)
-    """test_set = []
-    for i in range(20):
+    test_set = []
+    for i in range(100):
         state = env.reset()
         state, goal = utils.save_state(env)
         test_set.append((state, goal))
-    """
-    states, actions = get_experience(10, env)
+
+    states, actions = get_experience(200, env)
     print("new states :", np.array(states).shape)
     print("Normal states, actions ", len(states), len(actions))
 
-    net = model.ConvHybridNet(25, 4, 4, 4, [5,5,3,], [32,64, 128], [128, 32, 16], 0.001)
+    net = model.ConvHybridNet2(50, 4, 4, 4, [5,3,3,3], [16,32,64,128], 64, 3, 0.001)
+    ae = net
+    print("HERE")
     start = time.time()
-    net.train(np.array(states), actions, 8, 400, print_loss = True)
+    net.train(np.array(states), actions, 8, 100, print_loss = True)
     print("took ", str(time.time() - start))
     result_t = test(net, test_set, env, 0, 1, 0, 1, False)
     print("Normal learning results ", seed, " : ", result_t)
@@ -110,8 +114,8 @@ def go(seed, file):
 
 
 if __name__ == "__main__":
-    print(tf.__version__)
-    tf.config.gpu.set_per_process_memory_growth(True)
+    #tf.debugging.set_log_device_placement(True)
+#    tf.config.gpu.set_per_process_memory_growth(True)
     test_set = []
     filename = "logs/" + strftime("%Y-%m-%d %H:%M:%S", gmtime()) + ".txt"
     print(filename)
