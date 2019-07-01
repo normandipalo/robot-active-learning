@@ -18,58 +18,16 @@ def robot_reset(env):
         state, *_ = env.step(random_act)
     return state
 
-def avg_ae_error(ae, x):
-    tot_error_trainset = 0
-    for el in x:
-        error = ae.error(el.reshape((1,-1)))
-        tot_error_trainset+=error
-    tot_error_trainset/=len(x)
-    return tot_error_trainset
-
-def get_experience(eps, env, render = False):
+def get_experience(eps, env):
     states, actions = [], []
     for ep in range(eps):
         state = env.reset()
-        #state = robot_reset(env)
-        new_states, new_acts = man_controller.get_demo(env, state, CTRL_NORM, render)
+        state = robot_reset(env)
+        new_states, new_acts = man_controller.get_demo(env, state, CTRL_NORM)
         states+=new_states
         actions+=new_acts
 
     return states, actions
-
-def try_complete(model, ae, error_thr, env, xm, xs, am, ast, render = False):
-    succeded = 0
-    state, *_ = env.step([0.,0.,0.,0.])
-    picked = [False]
-    print("Error threshold", error_thr)
-    for i in range(100):
-        error = ae.error((np.concatenate((state["observation"],
-                                    state["achieved_goal"],
-                                    state["desired_goal"])).reshape((1,-1)) - xm)/xs)
-        print("Error in try_complete", error)
-        time.sleep(0.2)
-
-        if error > error_thr:
-            #Return the current env and state to get an expert demo. Return False
-            # to signal that it was unable to complete.
-            return False, env, state, error
-
-        action = model((np.concatenate((state["observation"],
-                                    state["achieved_goal"],
-                                    state["desired_goal"])).reshape((1,-1)) - xm)/xs)
-
-        action = action*ast + am
-        new_state, *_ = env.step(action[0])
-     #   print(action)
-        if render: env.render()
-        state = new_state
-
-        if not np.linalg.norm((state["achieved_goal"]- state["desired_goal"])) > 0.10:
-    #        print("SUCCESS!")
-            return True, env, state, error
-
-    return False, env, state, error
-
 
 def test(model, test_set, env, xm, xs, am, ast, render = False):
     successes, failures = 0,0
@@ -100,20 +58,6 @@ def test(model, test_set, env, xm, xs, am, ast, render = False):
        #     print("FAILURE")
             failures+=1
     return successes, failures
-
-def get_active_exp2(env, avg_error_trainset, model, ae, xm, xs, am, ast, render, take_max = False, max_act_steps = 20):
-    state = env.reset()
-    state = robot_reset(env)
-    succeded = True
-    while succeded:
-        #Credo che dovrei resettare lo stato qua, altrimenti prova a completare sempre lo stesso.
-        succeded, env, state, error = try_complete(model, ae, avg_error_trainset*1.1, env, xm, xs, am, ast, render = True)
-    #Here we have the env and the state where the robot doesn't know what to do.
-    time.sleep(1.)
-    print("Expert demo.")
-    new_states, new_acts = man_controller.get_demo(env, state, CTRL_NORM, render)
-
-    return new_states, new_acts
 
 def get_active_exp(env, threshold, ae, xm, xs, render, take_max = False, max_act_steps = 20):
 
@@ -189,10 +133,11 @@ def go(seed, file):
         state, goal = utils.save_state(env)
         test_set.append((state, goal))
 
-    states, actions = get_experience(INITIAL_TRAIN_EPS, env, False)
+    states, actions = get_experience(INITIAL_TRAIN_EPS, env)
     print("Normal states, actions ", len(states), len(actions))
 
     net = model.BCModel(states[0].shape[0], actions[0].shape[0], BC_HD, BC_HL, BC_LR, set_seed = seed)
+
     x = np.array(states)
     xm = x.mean()
     xs = x.std()
@@ -204,8 +149,6 @@ def go(seed, file):
     a = (a - a.mean())/a.std()
 
     start = time.time()
-    print("TEST")
-    print(x.shape)
     net.train(x, a, BC_BS, BC_EPS)
     print("Training took:")
     print(time.time() - start)
@@ -223,22 +166,10 @@ def go(seed, file):
     np.random.seed(seed)
 
     states, actions = states[:math.floor(len(states)*ORG_TRAIN_SPLIT)], actions[:math.floor(len(actions)*ORG_TRAIN_SPLIT)]
-    #Train behavior net on half data.
-    net_hf = model.BCModel(states[0].shape[0], actions[0].shape[0], BC_HD, BC_HL, BC_LR, set_seed = seed)
-    x = np.array(states)
-    xm = x.mean()
-    xs = x.std()
-    x = (x - x.mean())/x.std()
-
-    a = np.array(actions)
-    am = a.mean()
-    ast = a.std()
-    a = (a - a.mean())/a.std()
-    net_hf.train(x, a, BC_BS, BC_EPS*2)
-
     #get_experience(int(INITIAL_TRAIN_EPS*ORG_TRAIN_SPLIT), env)
     act_l_loops = math.ceil(((1.-ORG_TRAIN_SPLIT)*INITIAL_TRAIN_EPS)//ACTIVE_STEPS_RETRAIN)
     if act_l_loops == 0: act_l_loops+=1
+    ae = DAE(31, AE_HD, AE_HL, AE_LR, set_seed = seed)
     for i in range(act_l_loops):
 
         x = np.array(states)
@@ -247,21 +178,14 @@ def go(seed, file):
         x = (x - x.mean())/x.std()
 
         #if AE_RESTART: ae = DAE(31, AE_HD, AE_HL, AE_LR, set_seed = seed)
-        #Reinitialize both everytime and retrain.
-        ae = RandomNetwork(31, AE_HD, AE_HL, AE_LR, set_seed = seed)
-        net_hf = model.BCModel(states[0].shape[0], actions[0].shape[0], BC_HD, BC_HL, BC_LR, set_seed = seed)
 
         start = time.time()
         ae.train(x, AE_BS, AE_EPS)
-        net_hf.train(x, a, BC_BS, BC_EPS*2)
-        avg_error = avg_ae_error(ae, x)
-
         print("Training took:")
         print(time.time() - start)
 
         for j in range(ACTIVE_STEPS_RETRAIN):
-            #new_s, new_a = get_active_exp(env, ACTIVE_ERROR_THR, ae, xm, xs, RENDER_ACT_EXP, TAKE_MAX, MAX_ACT_STEPS)
-            new_s, new_a = get_active_exp2(env, avg_error, net_hf, ae, xm, xs, am, ast, True, TAKE_MAX, MAX_ACT_STEPS)
+            new_s, new_a = get_active_exp(env, ACTIVE_ERROR_THR, ae, xm, xs, RENDER_ACT_EXP, TAKE_MAX, MAX_ACT_STEPS)
             states+=new_s
             actions+=new_a
 
@@ -300,5 +224,5 @@ if __name__ == "__main__":
             print(str(k))
             file.write("\n" + str(k))
             file.write("\n\n")
-            with tf.device("/device:CPU:0"):
+            with tf.device("/device:GPU:0"):
                 go(k, file)
