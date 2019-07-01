@@ -35,6 +35,8 @@ def test(model, test_set, env, xm, xs, am, ast, render = False):
         env.reset()
         env = utils.set_state(env, test_set[i][0], test_set[i][1])
         state, *_ = env.step([0.,0.,0.,0.])
+
+        print("Error ", model.error(np.concatenate((state[1], state[2][:,:,None]), -1)[None,:,:,:]))
         picked = [False]
         for i in range(200):
             action = model(np.concatenate((state[1], state[2][:,:,None]), -1)[None,:,:,:])[0]
@@ -51,7 +53,7 @@ def test(model, test_set, env, xm, xs, am, ast, render = False):
 
                 break
         if not succeded:
-       #     print("FAILURE")
+            print("FAILURE")
             failures+=1
     return successes, failures
 
@@ -94,11 +96,12 @@ def go(seed, file):
         state, goal = utils.save_state(env)
         test_set.append((state, goal))
 
-    states, actions = get_experience(400, env)
+    states, actions = get_experience(200, env)
     print("new states :", np.array(states).shape)
     print("Normal states, actions ", len(states), len(actions))
 
-    net = model.ConvHybridNet(50, 4, 4, 4, [5,3,3,3], [16,32,64,128], [128, 32, 16, 16], 0.001)
+    net = model.ConvHybridNet2(50, 4, 4, 4, [5,3,3,3], [16,32,64,128], 64, 3, 0.001)
+    ae = net
     print("HERE")
     start = time.time()
     net.train(np.array(states), actions, 8, 100, print_loss = True)
