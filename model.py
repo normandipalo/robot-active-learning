@@ -1,7 +1,7 @@
 import tensorflow as tf
 import numpy as np
 from utils import *
-
+import time
 
 
 class BCModel(tf.keras.Model):
@@ -243,6 +243,7 @@ class ConvHybridNet2(tf.keras.Model):
 
         #Compute the flattened shape.
         self.flattened_shape = (self.im_size//(2**len(self.common_filters))) * (self.im_size//(2**len(self.common_filters))) * self.common_filters[-1]
+        print(self.flattened_shape)
         for _ in reversed(range(dec_layers)):
             self._delayers.append(tf.keras.layers.Dense(units = dec_units,
                                                         activation = "relu"))
@@ -281,7 +282,7 @@ class ConvHybridNet2(tf.keras.Model):
             x = tf.keras.layers.MaxPool2D(pool_size = (2,2))(x)
         embedded = x
 
-
+        print(embedded.shape)
         for l in self._actlayers:
             embedded = l(embedded)
 
@@ -294,6 +295,23 @@ class ConvHybridNet2(tf.keras.Model):
             encoded = l(encoded)
         enc_error = tf.reduce_mean(tf.losses.mean_squared_error(tf.stop_gradient(tf.keras.layers.Flatten()(x)), encoded))
         return actions, enc_error
+
+    @tf.function
+    def call_hidden(self, x):
+        for l in self._commonlayers:
+            x = l(x)
+            x = tf.keras.layers.MaxPool2D(pool_size = (2,2))(x)
+        embedded = x
+
+        return embedded
+
+    @tf.function
+    def call_ae(self, x):
+        encoded = tf.keras.layers.Flatten()(x)
+        for l in self._delayers:
+            encoded = l(encoded)
+        enc_error = tf.reduce_mean(tf.losses.mean_squared_error(tf.keras.layers.Flatten()(x), encoded))
+        return enc_error
 
     @tf.function
     def _loss(self, x, y):
@@ -322,14 +340,36 @@ class ConvHybridNet2(tf.keras.Model):
 
         return tf.reduce_mean(tf.losses.mean_squared_error(tf.stop_gradient(tf.keras.layers.Flatten()(x)), encoded))
 
-    def train(self, x, y, batch_size, epochs, print_loss = False, verbose = False):
+    def train(self, x, y, batch_size, epochs, network = None, print_loss = False, verbose = False):
+        assert network is not None
         if self.set_seed:
             tf.random.set_seed(self.set_seed)
+
         ds = self._create_ds(x, y, batch_size, epochs)
         for i, el in enumerate(ds):
             if verbose:
                 if i%1000==0: print("Element ", i)
-            self.train_step(el, print_loss, verbose)
+            if network == "bc" : self.train_step_act(el, print_loss, verbose)
+            elif network == "full" : self.train_step(el, print_loss, verbose)
+
+    def train_ae(self, x, batch_size, epochs, print_loss = False, verbose = False):
+        if self.set_seed:
+            tf.random.set_seed(self.set_seed)
+
+        #Cache the outputs of the initial network.
+        x_cache = np.zeros((len(x), self.im_size//(2**len(self.common_filters)),self.im_size//(2**len(self.common_filters)),self.common_filters[-1]))
+        start = time.time()
+        ds = self._create_ds(x, x, 1, 1)
+        for i, el in enumerate(ds):
+            x, y = el
+            x_cache[i] = self.call_hidden(x)
+        print("Cache created in ", time.time() - start)
+        print("shape", x_cache.shape)
+        ds = self._create_ds(np.array(x_cache), np.array(x_cache), batch_size, epochs)
+        for i, el in enumerate(ds):
+            if verbose:
+                if i%1000==0: print("Element ", i)
+            self.train_step_ae(el, print_loss, verbose)
 
     @tf.function
     def train_step(self, el, print_loss = False, verbose = False):
@@ -338,6 +378,29 @@ class ConvHybridNet2(tf.keras.Model):
             y_pred, pred_err = self.call_complete(x)
             loss = self._loss(y_pred, y)
             loss += pred_err
+        grads = tape.gradient(loss, self.variables)
+        self.opt.apply_gradients(zip(grads, self.variables))
+        if print_loss: print(loss)
+
+    @tf.function
+    def train_step_act(self, el, print_loss = False, verbose = False):
+        with tf.GradientTape() as tape:
+            x, y = el
+            y_pred, _ = self.call(x)
+            loss = self._loss(y_pred, y)
+            #loss += pred_err
+        grads = tape.gradient(loss, self.variables)
+        self.opt.apply_gradients(zip(grads, self.variables))
+        if print_loss: print(loss)
+
+    @tf.function
+    def train_step_ae(self, el, print_loss = False, verbose = False):
+        print("called")
+        with tf.GradientTape() as tape:
+            x, y = el
+            pred_err = self.call_ae(x)
+            #loss = self._loss(y_pred, y)
+            loss = pred_err
         grads = tape.gradient(loss, self.variables)
         self.opt.apply_gradients(zip(grads, self.variables))
         if print_loss: print(loss)
