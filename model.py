@@ -352,19 +352,41 @@ class ConvHybridNet2(tf.keras.Model):
             if network == "bc" : self.train_step_act(el, print_loss, verbose)
             elif network == "full" : self.train_step(el, print_loss, verbose)
 
+    def create_cache(self, x, batch_size, epochs, flatten = False, print_loss = False, verbose = False):
+        if not flatten:
+            x_cache = np.zeros((len(x), self.im_size//(2**len(self.common_filters)),self.im_size//(2**len(self.common_filters)),self.common_filters[-1]))
+        else:
+            x_cache = np.zeros((len(x), (self.im_size//(2**len(self.common_filters)))*(self.im_size//(2**len(self.common_filters)))*(self.common_filters[-1])))
+        start = time.time()
+        ds = self._create_ds(x, x, 1, 1)
+        for i, el in enumerate(ds):
+            x, y = el
+            if not flatten:
+                x_cache[i] = self.call_hidden(x)
+            else:
+                x_cache[i] = tf.keras.layers.Flatten()(self.call_hidden(x))
+        #ds = self._create_ds(np.array(x_cache), np.array(x_cache), batch_size, epochs)
+        print("Cache created in ", time.time() - start)
+        print("shape", x_cache.shape)
+        return x_cache
+
     def train_ae(self, x, batch_size, epochs, print_loss = False, verbose = False):
         if self.set_seed:
             tf.random.set_seed(self.set_seed)
 
         #Cache the outputs of the initial network.
+        """
         x_cache = np.zeros((len(x), self.im_size//(2**len(self.common_filters)),self.im_size//(2**len(self.common_filters)),self.common_filters[-1]))
         start = time.time()
         ds = self._create_ds(x, x, 1, 1)
         for i, el in enumerate(ds):
             x, y = el
             x_cache[i] = self.call_hidden(x)
+        ds = self._create_ds(np.array(x_cache), np.array(x_cache), batch_size, epochs)
         print("Cache created in ", time.time() - start)
         print("shape", x_cache.shape)
+        """
+        x_cache = self.create_cache(x, batch_size, epochs, flatten = False)
         ds = self._create_ds(np.array(x_cache), np.array(x_cache), batch_size, epochs)
         for i, el in enumerate(ds):
             if verbose:
