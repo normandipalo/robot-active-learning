@@ -13,26 +13,27 @@ class AE(tf.keras.Model):
         self._layers = []
         self._layers.append(tf.keras.layers.Dense(input_shape = [in_size],  units = hidden_dim, activation = "relu"))
         for i in range(hid_layers):
-            self._layers.append(LayerNorm(hidden_dim))
             self._layers.append(tf.keras.layers.Dense(hidden_dim, activation = "relu"))
         self._layers.append(tf.keras.layers.Dense(in_size))
 
         self.opt = tf.keras.optimizers.Adam(learning_rate = lr)
 
-
-    @tf.function
+#    @tf.function
     def call(self, x):
         for l in self._layers:
             x = l(x)
         return x
 
-    @tf.function
-    def error(self, x):
+#    @tf.function
+    def error(self, x, norm = True):
         y = self.call(x)
-        return tf.reduce_sum(tf.losses.mean_squared_error(y,x))
+        error = tf.losses.mean_squared_error(y,x)
+        if norm:
+            error = tf.losses.mean_squared_error(y,x)/tf.linalg.norm(x)
+        return tf.reduce_sum(error)
 
 
-    @tf.function
+#    @tf.function
     def _loss(self, x, y):
         return tf.reduce_mean(tf.losses.mean_squared_error(y, x)) #.mean_squared_error(y, x)
 
@@ -55,7 +56,7 @@ class AE(tf.keras.Model):
                 if i%1000==0: print("Element ", i)
             self.train_step(el, print_loss, verbose)
 
-    @tf.function
+#    @tf.function
     def train_step(self, el, print_loss = False, verbose = False):
         with tf.GradientTape() as tape:
             x = el

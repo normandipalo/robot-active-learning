@@ -28,12 +28,12 @@ hyperp = {"INITIAL_TRAIN_EPS" : 70,
 "TEST_EPS" : 100,
 "ACTIVE_STEPS_RETRAIN" : 10,
 "ACTIVE_ERROR_THR" : 1.5,
-"ERROR_THR_PRED" : 3,
+"ERROR_THR_PRED" : 4,
 
 "ORG_TRAIN_SPLIT" : 1.,
 "FULL_TRAJ_ERROR" : True,
 "CTRL_NORM" : True,
-"RENDER_TEST" : False}
+"RENDER_TEST" : True}
 
 INITIAL_TRAIN_EPS = hyperp["INITIAL_TRAIN_EPS"]
 BC_LR = hyperp["BC_LR"]
@@ -169,12 +169,12 @@ def predict(model, ae, test_set, env, xm, xs, am, ast, tot_error_trainset):
                                             state["achieved_goal"],
                                             state["desired_goal"])).reshape((1,-1)) - xm)/xs)
                 if error > ERROR_THR_PRED*tot_error_trainset:
-                #    print("Error became too high.")
                     prediction = "failure"
-         #   print(action)
+                    print("PREDICTED FAILURE")
+                    print(np.random.randn())
+                    #break #Should not break, because it could solve it even if it thinks it won't
 
             state = new_state
-
 
             if not np.linalg.norm((state["achieved_goal"]- state["desired_goal"])) > 0.07:
           #      print("SUCCESS!")
@@ -232,10 +232,7 @@ def get_active_exp(env, threshold, ae, xm, xs, render):
 
 
 def go(seed):
-    if not tf.__version__ == "2.0.0-alpha0":
-        tf.random.set_random_seed(seed)
-    else:
-        tf.random.set_seed(seed)
+    tf.random.set_seed(seed)
     env = gym.make("FetchPickAndPlace-v1")
     env.seed(seed)
 
