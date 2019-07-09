@@ -116,3 +116,21 @@ def get_demo_cam2(env, c_state, norm = False, render = False):
         if not np.linalg.norm((state[0]["achieved_goal"]- state[0]["desired_goal"])) > 0.05:
             break
     return states, actions
+
+def get_demo_cam_full(env, c_state, norm = False, render = False):
+    state = copy.copy(c_state)
+    states, actions, rob_states = [], [], []
+    picked = [False]
+    for i in range(200):
+        action, steps = controller(state[0], picked, norm)
+        for s in range(steps):
+            #Concat im rgb and depth.
+            states.append(np.concatenate((state[1], state[2][:,:,None]), -1))
+            rob_states.append(state[0]["observation"])
+            new_state, _, _, _ = env.step(action)
+            if render: env.render()
+            actions.append(action)
+            state = new_state
+        if not np.linalg.norm((state[0]["achieved_goal"]- state[0]["desired_goal"])) > 0.05:
+            break
+    return states, rob_states, actions

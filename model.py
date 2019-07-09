@@ -232,7 +232,7 @@ class ConvHybridNet2(tf.keras.Model):
         self._commonlayers = []
         for _ in range(len(common_filters)):
             self._commonlayers.append(tf.keras.layers.Conv2D(kernel_size = k_sizes[_], filters = common_filters[_],
-                                                        activation = "relu", strides = 1, padding = "same"))
+                                                        activation = "relu", strides = 2, padding = "same"))
         #    self._layers.append(tf.keras.layers.BatchNormalization())
 
         self._actlayers = []
@@ -255,7 +255,7 @@ class ConvHybridNet2(tf.keras.Model):
     def call(self, x):
         for l in self._commonlayers:
             x = l(x)
-            x = tf.keras.layers.MaxPool2D(pool_size = (2,2))(x)
+        #    x = tf.keras.layers.MaxPool2D(pool_size = (2,2))(x)
         encoded = x
 
 
@@ -279,7 +279,7 @@ class ConvHybridNet2(tf.keras.Model):
     def call_complete(self, x):
         for l in self._commonlayers:
             x = l(x)
-            x = tf.keras.layers.MaxPool2D(pool_size = (2,2))(x)
+        #    x = tf.keras.layers.MaxPool2D(pool_size = (2,2))(x)
         embedded = x
 
         print(embedded.shape)
@@ -300,7 +300,7 @@ class ConvHybridNet2(tf.keras.Model):
     def call_hidden(self, x):
         for l in self._commonlayers:
             x = l(x)
-            x = tf.keras.layers.MaxPool2D(pool_size = (2,2))(x)
+    #        x = tf.keras.layers.MaxPool2D(pool_size = (2,2))(x)
         embedded = x
 
         return embedded
@@ -331,7 +331,7 @@ class ConvHybridNet2(tf.keras.Model):
     def error(self, x):
         for l in self._commonlayers:
             x = l(x)
-            x = tf.keras.layers.MaxPool2D(pool_size = (2,2))(x)
+    #        x = tf.keras.layers.MaxPool2D(pool_size = (2,2))(x)
         encoded = x
         encoded = tf.keras.layers.Flatten()(encoded)
 
@@ -354,9 +354,9 @@ class ConvHybridNet2(tf.keras.Model):
 
     def create_cache(self, x, batch_size, epochs, flatten = False, print_loss = False, verbose = False):
         if not flatten:
-            x_cache = np.zeros((len(x), self.im_size//(2**len(self.common_filters)),self.im_size//(2**len(self.common_filters)),self.common_filters[-1]))
+            x_cache = np.zeros((len(x), 1568))#self.im_size//(2**len(self.common_filters)),self.im_size//(2**len(self.common_filters)),self.common_filters[-1]))
         else:
-            x_cache = np.zeros((len(x), (self.im_size//(2**len(self.common_filters)))*(self.im_size//(2**len(self.common_filters)))*(self.common_filters[-1])))
+            x_cache = np.zeros((len(x), 1568)) #(self.im_size//(2**len(self.common_filters)))*(self.im_size//(2**len(self.common_filters)))*(self.common_filters[-1])))
         start = time.time()
         ds = self._create_ds(x, x, 1, 1)
         for i, el in enumerate(ds):

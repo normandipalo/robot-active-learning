@@ -17,20 +17,21 @@ from hparams_perf import *
 
 def get_experience(eps, env):
     global test_set
-    states, actions = [], []
+    states, actions, rob_states = [], [], []
     for ep in range(eps):
         state = env.reset()
         #Remove to not include in training set.
         state_, goal = utils.save_state(env)
         test_set.append((state_, goal))
         #####
-        new_states, new_acts = man_controller.get_demo_cam2(env, state, norm = True)
+        new_states, new_rob_states, new_acts = man_controller.get_demo_cam_full(env, state, norm = True)
         states+=new_states
         actions+=new_acts
+        rob_states+=new_rob_states
 
-    return states, actions
+    return states, rob_states, actions
 
-def test(model, test_set, env, xm, xs, am, ast, ae = None, render = False):
+def test(model, test_set, env, xm, xs, am, ast, ae = None, ae_rob_s = None, render = False):
     successes, failures = 0,0
     errs_s, errs_f = 0, 0
     for i in range(len(test_set)):
@@ -41,7 +42,10 @@ def test(model, test_set, env, xm, xs, am, ast, ae = None, render = False):
         if ae:
             x = tf.keras.layers.Flatten()(model.call_hidden(np.concatenate((state[1], state[2][:,:,None]), -1)[None,:,:,:]))
             err = ae.error(x)
-            print("Error ", err)
+            if ae_rob_s:
+                print("Error ", err)
+                err_rob_s = ae_rob_s.error(state[0]["observation"][None,:])
+                print("Robot state error ", err_rob_s)
         else:
             err = model.error(np.concatenate((state[1], state[2][:,:,None]), -1)[None,:,:,:])
             print("Error ", err)
@@ -54,6 +58,15 @@ def test(model, test_set, env, xm, xs, am, ast, ae = None, render = False):
             if render: env.render()
             state = new_state
 
+            x = tf.keras.layers.Flatten()(model.call_hidden(np.concatenate((state[1], state[2][:,:,None]), -1)[None,:,:,:]))
+            if ae:
+                err = ae.error(x)
+                print("Error ", err)
+            if ae_rob_s:
+                print("Error ", err)
+                err_rob_s = ae_rob_s.error(state[0]["observation"][None,:])
+                print("Robot state error ", err_rob_s)
+
             if not np.linalg.norm((state[0]["achieved_goal"]- state[0]["desired_goal"])) > 0.07:
         #        print("SUCCESS!")
                 succeded = 1
@@ -65,6 +78,8 @@ def test(model, test_set, env, xm, xs, am, ast, ae = None, render = False):
             print("FAILURE")
             failures+=1
             errs_f += err
+        if succeded:
+            print("SUCCEDED")
 
     print("Errors of successes: ",  errs_s/successes, ". Errors of failures: ", errs_f/failures)
     return successes, failures
@@ -101,24 +116,25 @@ def go(seed, file):
 #        tf.random.set_random_seed(seed)
 #    else:
     tf.random.set_seed(seed)
-    env = CameraRobot(gym.make("FetchPickAndPlace-v1"), 75)
+    env = CameraRobot(gym.make("FetchPickAndPlace-v1"), 50)
     env.seed(seed)
 #    test_set = []  De-comment to reset test set
-    for i in range(10):
+    for i in range(50):
         state = env.reset()
         state, goal = utils.save_state(env)
         test_set.append((state, goal))
 
-    states, actions = get_experience(100, env)
+    states, rob_states, actions = get_experience(50, env)
     print("new states :", np.array(states).shape)
     print("Normal states, actions ", len(states), len(actions))
 
-    net = model.ConvHybridNet2(75, 4, 4, 3, [5,3,3], [16,32,32], 64, 3, 0.001)
+    net = model.ConvHybridNet2(50, 4, 4, 3, [5,3,3], [16,32,32], 64, 3, 0.001)
     #ae = net
-    ae = AE(1152, 128, 3, 0.001, set_seed = seed)
+    ae = DAE(1568, 128, 3, 0.001, set_seed = seed)
+    ae_rob_s = DAE(25, 128, 3, 0.001, set_seed = seed)
     print("HERE")
     start = time.time()
-    net.train(np.array(states), actions, 16, 400, network = "bc", print_loss = True)
+    net.train(np.array(states), actions, 16, 4, network = "bc", print_loss = True)
     print("took ", str(time.time() - start))
 
     print("Creating cache")
@@ -126,9 +142,12 @@ def go(seed, file):
 
     start = time.time()
     #net.train_ae(np.array(states), 64, 20, print_loss = True)
-    ae.train(x_cache, 8, 10)
+    ae.train(x_cache, 8, 50)
+    print("Robot states: ", np.array(rob_states).shape)
+    ae_rob_s.train(np.array(rob_states), 8, 50)
+
     print("took ", str(time.time() - start))
-    result_t = test(net, test_set, env, 0, 1, 0, 1, render = False, ae = ae)
+    result_t = test(net, test_set, env, 0, 1, 0, 1, render = False, ae = ae, ae_rob_s = ae_rob_s)
     print("Normal learning results ", seed, " : ", result_t)
     file.write(str("Normal learning results " + str(seed) + " : " + str(result_t)))
     print("Full experiment took ", (time.time() - global_start)/60, " minutes.")
