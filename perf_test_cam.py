@@ -15,14 +15,21 @@ import utils
 from hparams_perf import *
 
 
+def robot_reset(env):
+    random_act = np.random.randn(4)*0.3
+    for i in range(20):
+        state, *_ = env.step(random_act)
+    return state
+
 def get_experience(eps, env):
     global test_set
     states, actions, rob_states = [], [], []
     for ep in range(eps):
         state = env.reset()
+        state = robot_reset(env)
         #Remove to not include in training set.
-        state_, goal = utils.save_state(env)
-        test_set.append((state_, goal))
+    #    state_, goal = utils.save_state(env)
+    #    test_set.append((state_, goal))
         #####
         new_states, new_rob_states, new_acts = man_controller.get_demo_cam_full(env, state, norm = True)
         states+=new_states
@@ -33,22 +40,23 @@ def get_experience(eps, env):
 
 def test(model, test_set, env, xm, xs, am, ast, ae = None, ae_rob_s = None, render = False):
     successes, failures = 0,0
-    errs_s, errs_f = 0, 0
+    errs_s, errs_f, errs_s_rob, errs_f_rob = 0, 0, 0, 0
     for i in range(len(test_set)):
         succeded = 0
         env.reset()
+        state = robot_reset(env)
         env = utils.set_state(env, test_set[i][0], test_set[i][1])
         state, *_ = env.step([0.,0.,0.,0.])
         if ae:
             x = tf.keras.layers.Flatten()(model.call_hidden(np.concatenate((state[1], state[2][:,:,None]), -1)[None,:,:,:]))
             err = ae.error(x)
             if ae_rob_s:
-                print("Error ", err)
-                err_rob_s = ae_rob_s.error(state[0]["observation"][None,:])
-                print("Robot state error ", err_rob_s)
+#                print("Error ", err)
+                err_rob_s = ae_rob_s.error(state[0]["observation"][:3][None,:])
+#                print("Robot state error ", err_rob_s)
         else:
             err = model.error(np.concatenate((state[1], state[2][:,:,None]), -1)[None,:,:,:])
-            print("Error ", err)
+#            print("Error ", err)
         picked = [False]
         for i in range(200):
             action = model(np.concatenate((state[1], state[2][:,:,None]), -1)[None,:,:,:])[0]
@@ -61,27 +69,29 @@ def test(model, test_set, env, xm, xs, am, ast, ae = None, ae_rob_s = None, rend
             x = tf.keras.layers.Flatten()(model.call_hidden(np.concatenate((state[1], state[2][:,:,None]), -1)[None,:,:,:]))
             if ae:
                 err = ae.error(x)
-                print("Error ", err)
+#                print("Error ", err)
             if ae_rob_s:
-                print("Error ", err)
-                err_rob_s = ae_rob_s.error(state[0]["observation"][None,:])
-                print("Robot state error ", err_rob_s)
+                err_rob_s = ae_rob_s.error(state[0]["observation"][:3][None,:])
+#                print("Robot state error ", err_rob_s)
 
             if not np.linalg.norm((state[0]["achieved_goal"]- state[0]["desired_goal"])) > 0.07:
         #        print("SUCCESS!")
                 succeded = 1
                 successes +=1
                 errs_s += err
+                errs_s_rob += err_rob_s
                 break
 
         if not succeded:
             print("FAILURE")
             failures+=1
             errs_f += err
+            errs_f_rob += err_rob_s
         if succeded:
             print("SUCCEDED")
 
-    print("Errors of successes: ",  errs_s/successes, ". Errors of failures: ", errs_f/failures)
+    print("Errors of successes: ",  errs_s/successes, ". Errors of failures: ", errs_f/failures,
+    "\n Robot state errors of successes: ",  errs_s_rob/successes, ". Robot state errors of failures: ", errs_f_rob/failures)
     return successes, failures
 
 def get_active_exp(env, threshold, ae, xm, xs, render):
@@ -124,27 +134,27 @@ def go(seed, file):
         state, goal = utils.save_state(env)
         test_set.append((state, goal))
 
-    states, rob_states, actions = get_experience(50, env)
+    states, rob_states, actions = get_experience(200, env)
     print("new states :", np.array(states).shape)
     print("Normal states, actions ", len(states), len(actions))
 
     net = model.ConvHybridNet2(50, 4, 4, 3, [5,3,3], [16,32,32], 64, 3, 0.001)
     #ae = net
     ae = DAE(1568, 128, 3, 0.001, set_seed = seed)
-    ae_rob_s = DAE(25, 128, 3, 0.001, set_seed = seed)
+    ae_rob_s = DAE(3, 32, 3, 0.001, set_seed = seed)
     print("HERE")
     start = time.time()
-    net.train(np.array(states), actions, 16, 4, network = "bc", print_loss = True)
+    net.train(np.array(states), actions, 16, 400, network = "bc", print_loss = True)
     print("took ", str(time.time() - start))
 
     print("Creating cache")
-    x_cache = net.create_cache(np.array(states), 64, 20, flatten = True)
+    x_cache = net.create_cache(np.array(states), flatten = True)
 
     start = time.time()
     #net.train_ae(np.array(states), 64, 20, print_loss = True)
-    ae.train(x_cache, 8, 50)
+    ae.train(x_cache, 32, 100)
     print("Robot states: ", np.array(rob_states).shape)
-    ae_rob_s.train(np.array(rob_states), 8, 50)
+    ae_rob_s.train(np.array(rob_states), 32, 100)
 
     print("took ", str(time.time() - start))
     result_t = test(net, test_set, env, 0, 1, 0, 1, render = False, ae = ae, ae_rob_s = ae_rob_s)
