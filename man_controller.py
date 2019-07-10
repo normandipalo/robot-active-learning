@@ -44,11 +44,14 @@ def controller(state, picked, norm = False):
     if picked[0] == False:
         if np.linalg.norm(diff[:2]) > 0.01:
             action, steps = reach_xy_contr(state, norm)
+            if not np.linalg.norm(diff[2]) > 0.1: #If the robot is at the cube level
+                action[2] += 1                      # go up or it will push it away
         elif np.linalg.norm(diff[2])> 0.005:
             action, steps = reach_x_open(state, norm)
         else:
             action, steps = pick(state)
             picked[0] = True
+
     else:
         action, steps = go_to_goal(state, norm)
     return action, steps
@@ -104,7 +107,7 @@ def get_demo_cam2(env, c_state, norm = False, render = False):
     state = copy.copy(c_state)
     states, actions = [], []
     picked = [False]
-    for i in range(200):
+    for i in range(100):
         action, steps = controller(state[0], picked, norm)
         for s in range(steps):
             #Concat im rgb and depth.
@@ -121,12 +124,12 @@ def get_demo_cam_full(env, c_state, norm = False, render = False):
     state = copy.copy(c_state)
     states, actions, rob_states = [], [], []
     picked = [False]
-    for i in range(200):
+    for i in range(100):
         action, steps = controller(state[0], picked, norm)
         for s in range(steps):
             #Concat im rgb and depth.
             states.append(np.concatenate((state[1], state[2][:,:,None]), -1))
-            rob_states.append(state[0]["observation"])
+            rob_states.append(state[0]["observation"][:3])
             new_state, _, _, _ = env.step(action)
             if render: env.render()
             actions.append(action)
