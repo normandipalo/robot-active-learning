@@ -41,12 +41,12 @@ def try_complete(model, ae, error_thr, env, xm, xs, am, ast, render = False):
     succeded = 0
     state, *_ = env.step([0.,0.,0.,0.])
     picked = [False]
-    print("Error threshold", error_thr)
+#    print("Error threshold", error_thr)
     for i in range(100):
         error = ae.error((np.concatenate((state["observation"],
                                     state["achieved_goal"],
                                     state["desired_goal"])).reshape((1,-1)) - xm)/xs)
-        print("Error in try_complete", error)
+#        print("Error in try_complete", error)
         time.sleep(0.2)
 
         if error > error_thr:
@@ -106,13 +106,25 @@ def get_active_exp2(env, avg_error_trainset, model, ae, xm, xs, am, ast, render,
     state = robot_reset(env)
     succeded = True
     while succeded:
+        state = env.reset()
+        state = robot_reset(env)
         #Credo che dovrei resettare lo stato qua, altrimenti prova a completare sempre lo stesso.
-        succeded, env, state, error = try_complete(model, ae, avg_error_trainset*1.1, env, xm, xs, am, ast, render = True)
+        succeded, env, state, error = try_complete(model, ae, avg_error_trainset*1.1, env, xm, xs, am, ast, render = RENDER_TEST)
     #Here we have the env and the state where the robot doesn't know what to do.
     time.sleep(1.)
-    print("Expert demo.")
+#    print("Expert demo.")
     new_states, new_acts = man_controller.get_demo(env, state, CTRL_NORM, render)
 
+#    if len(new_states) > 100:
+        #If it's so long the demo failed.
+        #Should consider to reset it and try again, otherwise we waste a demo.
+#        return [], []
+
+    #Recursively call until a demo works.
+    while len(new_states) > 100:
+        #If it's so long the demo failed.
+        #Should consider to reset it and try again, otherwise we waste a demo.
+        new_states, new_acts = get_active_exp2(env, avg_error_trainset, model, ae, xm, xs, am, ast, render, take_max = False, max_act_steps = 20)
     return new_states, new_acts
 
 def get_active_exp(env, threshold, ae, xm, xs, render, take_max = False, max_act_steps = 20):
@@ -175,10 +187,8 @@ def get_active_exp(env, threshold, ae, xm, xs, render, take_max = False, max_act
 
 
 def go(seed, file):
-    if not tf.__version__ == "2.0.0-beta0":
-        tf.random.set_random_seed(seed)
-    else:
-        tf.random.set_seed(seed)
+
+    tf.random.set_seed(seed)
     env = gym.make("FetchPickAndPlace-v1")
     env.seed(seed)
     np.random.seed(seed)
@@ -189,7 +199,7 @@ def go(seed, file):
         state, goal = utils.save_state(env)
         test_set.append((state, goal))
 
-    states, actions = get_experience(INITIAL_TRAIN_EPS, env, False)
+    states, actions = get_experience(INITIAL_TRAIN_EPS, env, RENDER_TEST)
     print("Normal states, actions ", len(states), len(actions))
 
     net = model.BCModel(states[0].shape[0], actions[0].shape[0], BC_HD, BC_HL, BC_LR, set_seed = seed)
@@ -214,10 +224,7 @@ def go(seed, file):
     file.write(str("Normal learning results " + str(seed) + " : " + str(result_t)))
 
     ## Active Learning Part ###
-    if not tf.__version__ == "2.0.0-beta0":
-        tf.random.set_random_seed(seed)
-    else:
-        tf.random.set_seed(seed)
+    tf.random.set_seed(seed)
     env = gym.make("FetchPickAndPlace-v1")
     env.seed(seed)
     np.random.seed(seed)
@@ -246,6 +253,11 @@ def go(seed, file):
         xs = x.std()
         x = (x - x.mean())/x.std()
 
+        a = np.array(actions)
+        am = a.mean()
+        ast = a.std()
+        a = (a - a.mean())/a.std()
+
         #if AE_RESTART: ae = DAE(31, AE_HD, AE_HL, AE_LR, set_seed = seed)
         #Reinitialize both everytime and retrain.
         ae = RandomNetwork(31, AE_HD, AE_HL, AE_LR, set_seed = seed)
@@ -261,7 +273,8 @@ def go(seed, file):
 
         for j in range(ACTIVE_STEPS_RETRAIN):
             #new_s, new_a = get_active_exp(env, ACTIVE_ERROR_THR, ae, xm, xs, RENDER_ACT_EXP, TAKE_MAX, MAX_ACT_STEPS)
-            new_s, new_a = get_active_exp2(env, avg_error, net_hf, ae, xm, xs, am, ast, True, TAKE_MAX, MAX_ACT_STEPS)
+            new_s, new_a = get_active_exp2(env, avg_error, net_hf, ae, xm, xs, am, ast, RENDER_TEST, TAKE_MAX, MAX_ACT_STEPS)
+            print("len new s ", len(new_s), " len new a ", len(new_a))
             states+=new_s
             actions+=new_a
 
