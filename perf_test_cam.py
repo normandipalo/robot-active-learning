@@ -21,12 +21,19 @@ def robot_reset(env):
         state, *_ = env.step(random_act)
     return state
 
+def robot_random_pick(env):
+    #Pick the cube and bring arm to random pos.
+    state = env.reset()
+    state = man_controller.get_demo_cam_random_pick(env, state, norm = True, render = False)
+    return state
+
 def get_experience(eps, env):
     global test_set
     states, actions, rob_states = [], [], []
     for ep in range(eps):
         state = env.reset()
-        state = robot_reset(env)
+        #Alternate between moving only the arm and bringing the cube to random pos.
+        state = robot_reset(env) if ep%2==0 else robot_random_pick(env)
         #Remove to not include in training set.
     #    state_, goal = utils.save_state(env)
     #    test_set.append((state_, goal))
@@ -134,17 +141,17 @@ def go(seed, file):
         state, goal = utils.save_state(env)
         test_set.append((state, goal))
 
-    states, rob_states, actions = get_experience(200, env)
+    states, rob_states, actions = get_experience(300, env)
     print("new states :", np.array(states).shape)
     print("Normal states, actions ", len(states), len(actions))
 
-    net = model.ConvHybridNet2(50, 4, 4, 3, [5,3,3], [16,32,32], 64, 3, 0.001)
+    net = model.ConvHybridNet2(50, 4, 4, 4, [5,3,3,3], [16,32,64,128], 64, 3, 0.001)
     #ae = net
-    ae = DAE(1568, 128, 3, 0.001, set_seed = seed)
+    ae = DAE(2048, 128, 3, 0.001, set_seed = seed)
     ae_rob_s = DAE(3, 32, 3, 0.001, set_seed = seed)
     print("HERE")
     start = time.time()
-    net.train(np.array(states), actions, 16, 400, network = "bc", print_loss = True)
+    net.train(np.array(states), actions, 32, 400, network = "bc", print_loss = True)
     print("took ", str(time.time() - start))
 
     print("Creating cache")
