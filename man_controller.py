@@ -40,6 +40,8 @@ def go_to_goal(state, norm = False):
 def controller(state, picked, norm = False):
     cube_pos = state["achieved_goal"]
     robot_pos = state["observation"][:3]
+    if cube_pos[2] > 0.43: picked[0] = True
+    print("cube pos", cube_pos)
     diff = cube_pos - robot_pos
     if picked[0] == False:
         if np.linalg.norm(diff[:2]) > 0.01:
@@ -137,3 +139,27 @@ def get_demo_cam_full(env, c_state, norm = False, render = False):
         if not np.linalg.norm((state[0]["achieved_goal"]- state[0]["desired_goal"])) > 0.05:
             break
     return states, rob_states, actions
+
+def get_demo_cam_random_pick(env, c_state, norm = False, render = False):
+    #Used to pick the cube and go to a random position,
+    # to then obtain a demo from that state.
+    state = copy.copy(c_state)
+    picked = [False]
+    for i in range(100):
+        if picked[0] == True: break
+        action, steps = controller(state[0], picked, norm)
+        for s in range(steps):
+            #Concat im rgb and depth.
+            new_state, _, _, _ = env.step(action)
+            if render: env.render()
+            state = new_state
+
+    random_dir = np.random.randn(4)*0.4
+    random_dir[3] = -1
+
+    for s in range(20):
+        new_state, _, _, _ = env.step(random_dir)
+        if render: env.render()
+        state = new_state
+
+    return state
