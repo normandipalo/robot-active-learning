@@ -1,10 +1,11 @@
 import numpy as np
 import copy
 
-def reach_xy_contr(state, norm = False):
-    cube_pos = state["achieved_goal"]
+def reach_xy_contr(state,cube = 0, norm = False):
+    cube_pos0 = state["achieved_goal"][:3]
+    cube_pos1 = state["achieved_goal"][3:6]
     robot_pos = state["observation"][:3]
-    diff = cube_pos - robot_pos
+    diff = cube_pos0 - robot_pos if not cube else cube_pos1 - robot_pos
     if not norm:
         action = diff*10
     else:
@@ -13,10 +14,11 @@ def reach_xy_contr(state, norm = False):
     action = np.concatenate((action, [0.]))
     return action, 1
 
-def reach_x_open(state, norm = False):
-    cube_pos = state["achieved_goal"]
+def reach_x_open(state, cube = 0, norm = False):
+    cube_pos0 = state["achieved_goal"][:3]
+    cube_pos1 = state["achieved_goal"][3:6]
     robot_pos = state["observation"][:3]
-    diff = cube_pos - robot_pos
+    diff = cube_pos0 - robot_pos if not cube else cube_pos1 - robot_pos
     if not norm:
         action = diff*5
     else:
@@ -27,34 +29,89 @@ def reach_x_open(state, norm = False):
 def pick(state):
     return [0.,0.,0.,-1.], 10
 
-def go_to_goal(state, norm = False):
-    cube_pos = state["achieved_goal"]
-    diff = state["desired_goal"] - cube_pos
+def go_to_goal(state, cube = 0, norm = False, go_up = 0, curr_goal = None):
+    cube_pos0 = state["achieved_goal"][:3]
+    cube_pos1 = state["achieved_goal"][3:6]
+    if curr_goal is None:
+        curr_goal = state["desired_goal"]
+    diff = curr_goal - cube_pos0 if not cube else (curr_goal - cube_pos1)
     if not norm:
         action = diff * 5
     else:
         action = diff/np.linalg.norm(diff)
     action = np.concatenate((action, [-1.]))
+    if go_up:
+        action[2] += 1
     return action, 1
 
-def controller(state, picked, norm = False):
-    cube_pos = state["achieved_goal"]
+def controller(state, picked, in_position, norm = True):
+    cube_pos0 = state["achieved_goal"][:3]
+    cube_pos1 = state["achieved_goal"][3:6]
     robot_pos = state["observation"][:3]
-    if cube_pos[2] > 0.43: picked[0] = True
-    diff = cube_pos - robot_pos
-    if picked[0] == False:
-        if np.linalg.norm(diff[:2]) > 0.01:
-            action, steps = reach_xy_contr(state, norm)
-            if not np.linalg.norm(diff[2]) > 0.1: #If the robot is at the cube level
-                action[2] += 1                      # go up or it will push it away
-        elif np.linalg.norm(diff[2])> 0.005:
-            action, steps = reach_x_open(state, norm)
-        else:
-            action, steps = pick(state)
-            picked[0] = True
+    if cube_pos0[2] > 0.43: picked[0] = True
+    if cube_pos1[2] > 0.43: picked[1] = True
+    diff0 = cube_pos0 - robot_pos
+    diff1 = cube_pos1 - robot_pos
+    if not in_position[0]:
+        cube = 0
+        alligned_z = 0
+        if picked[0] == False:
+            if np.linalg.norm(diff0[:2]) > 0.01:
+                action, steps = reach_xy_contr(state, cube, norm)
+                #If the robot is at the cube level go up or it will push it away.
+                # Go particularly up to avoid touching the other cube.
+                if not np.linalg.norm(diff0[2]) > 0.5:
+                    action[2] += 0.2
+            elif np.linalg.norm(diff0[2])> 0.005:
+                action, steps = reach_x_open(state, cube, norm)
+            else:
+                action, steps = pick(state)
+                picked[0] = True
 
+        else:
+            if np.linalg.norm(cube_pos0[:2] - state["desired_goal"][:2]).__lt__(0.03): alligned_z = True
+            if not alligned_z:
+                #use this to reach the goal from above and avoid touching
+                # the other cube, then go down to release the cube in place.
+                action, steps = go_to_goal(state, cube, norm, go_up = False, curr_goal = state["desired_goal"] + np.array([0.,0,0.1]))
+            #    if np.linalg.norm(diff0[:2]).__lt__(0.01): alligned_z = True
+            else:
+                action, steps = go_to_goal(state, cube, norm)
+                if np.linalg.norm(cube_pos0[:] - state["desired_goal"][:]).__lt__(0.01):
+                    in_position[0] = True
+                    action, steps = np.array([0.,0.,0.5,1.]), 5
     else:
-        action, steps = go_to_goal(state, norm)
+        cube = 1
+        if not in_position[1]:
+
+            alligned_z = 0
+            if picked[1] == False:
+                if np.linalg.norm(diff1[:2]) > 0.01:
+                    action, steps = reach_xy_contr(state, cube, norm)
+                    #If the robot is at the cube level go up or it will push it away.
+                    # Go particularly up to avoid touching the other cube.
+                    if not np.linalg.norm(diff1[2]) > 0.5:
+                        action[2] += 0.2
+                elif np.linalg.norm(diff1[2])> 0.005:
+                    action, steps = reach_x_open(state, cube, norm)
+                else:
+                    action, steps = pick(state)
+                    picked[1] = True
+
+            else:
+                print("here 2")
+                if np.linalg.norm(cube_pos1[:2] - state["desired_goal"][:2]).__lt__(0.03): alligned_z = True
+                if not alligned_z:
+                    #use this to reach the goal from above and avoid touching
+                    # the other cube, then go down to release the cube in place.
+                    action, steps = go_to_goal(state, cube, norm, go_up = False, curr_goal = state["desired_goal"] + np.array([0.,0.,0.2]))
+                #    if np.linalg.norm(diff0[:2]).__lt__(0.01): alligned_z = True
+                else:
+                    print("Here", cube)
+                    action, steps = go_to_goal(state, cube, norm, curr_goal = state["desired_goal"])
+                    if np.linalg.norm(cube_pos1[:] - state["desired_goal"][:]).__lt__(0.1):
+                        in_position[1] = True
+                        action, steps = np.array([0.,0.,0.5,1.]), 5
     return action, steps
 
 def get_demo_cam(env, c_state, norm = False, render = False, depth = False):
@@ -88,9 +145,10 @@ def get_demo_cam(env, c_state, norm = False, render = False, depth = False):
 
 def get_demo(env, state, norm = False, render = False):
     states, actions = [], []
-    picked = [False]
+    picked = [False, False]
+    in_position = [False, False]
     for i in range(200):
-        action, steps = controller(state, picked, norm)
+        action, steps = controller(state, picked, in_position, norm)
         for s in range(steps):
             states.append(np.concatenate((state["observation"],
                                         state["achieved_goal"],
@@ -99,8 +157,8 @@ def get_demo(env, state, norm = False, render = False):
             if render: env.render()
             actions.append(action)
             state = new_state
-        if not np.linalg.norm((state["achieved_goal"]- state["desired_goal"])) > 0.05:
-            break
+#        if not np.linalg.norm((state["achieved_goal"]- state["desired_goal"])) > 0.05:
+#            break
     return states, actions
 
 
