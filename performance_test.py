@@ -5,22 +5,38 @@ import math
 import time
 import datetime
 from time import gmtime, strftime
+from fetch_env_two_obj.fetch.pick_and_place import FetchPickAndPlaceTwoEnv
 
 import model
 from ae import *
 import man_controller
-import utils
+import utils as u
 from hparams import *
+from envs import *
 
+def robot_reset(env):
+    random_act = np.random.randn(4)*0.3
+    for i in range(1):
+        state, *_ = env.step(random_act)
+    return state
+
+def robot_random_pick(env):
+    #Pick the cube and bring arm to random pos.
+    state = env.reset()
+    state = man_controller.get_demo_cam_random_pick(env, state, norm = True, render = RENDER_TEST)
+    return state
 
 def get_experience(eps, env):
     states, actions = [], []
     for ep in range(eps):
         state = env.reset()
-        new_states, new_acts = man_controller.get_demo(env, state)
+        if full_expl:
+            state = robot_reset(env) if ep%2==0 else robot_random_pick(env)
+        new_states, new_acts = man_controller.get_demo(env, state, norm = True, render = RENDER_TEST)
+
         states+=new_states
         actions+=new_acts
-                
+
     return states, actions
 
 def test(model, test_set, env, xm, xs, am, ast, render = False):
@@ -28,10 +44,10 @@ def test(model, test_set, env, xm, xs, am, ast, render = False):
     for i in range(len(test_set)):
         succeded = 0
         env.reset()
-        env = utils.set_state(env, test_set[i][0], test_set[i][1])
+        env = u.set_state(env, test_set[i][0], test_set[i][1])
         state, *_ = env.step([0.,0.,0.,0.])
         picked = [False]
-        for i in range(100):
+        for i in range(200):
             action = model((np.concatenate((state["observation"],
                                         state["achieved_goal"],
                                         state["desired_goal"])).reshape((1,-1)) - xm)/xs)
@@ -41,20 +57,21 @@ def test(model, test_set, env, xm, xs, am, ast, render = False):
          #   print(action)
             if render: env.render()
             state = new_state
-       
-            if not np.linalg.norm((state["achieved_goal"]- state["desired_goal"])) > 0.07:
+
+            if not np.linalg.norm((state["achieved_goal"][:3]- state["desired_goal"])) > 0.05 and not np.linalg.norm((state["achieved_goal"][3:6]- state["achieved_goal"][:3])) > 0.05:# \
+    #         and not np.linalg.norm((state["achieved_goal"][5]- state["achieved_goal"][2])) > 0.03:
         #        print("SUCCESS!")
                 succeded = 1
                 successes +=1
 
                 break
-        if not succeded: 
+        if not succeded:
        #     print("FAILURE")
             failures+=1
     return successes, failures
 
 def get_active_exp(env, threshold, ae, xm, xs, render):
-    
+
     err_avg = 0
     for i in range(20):
         state = env.reset()
@@ -63,7 +80,7 @@ def get_active_exp(env, threshold, ae, xm, xs, render):
                                     state["desired_goal"])).reshape((1,-1)) - xm)/xs)
         err_avg+=error
     err_avg/=20
-    
+
     state = env.reset()
     error = ae.error((np.concatenate((state["observation"],
                                     state["achieved_goal"],
@@ -85,17 +102,18 @@ def get_active_exp(env, threshold, ae, xm, xs, render):
 
 
 def go(seed, file):
-    if not tf.__version__ == "2.0.0-alpha0":
-        tf.random.set_random_seed(seed)
-    else: 
-        tf.random.set_seed(seed)
-    env = gym.make("FetchPickAndPlace-v1")
+    tf.random.set_seed(seed)
+    #env = gym.make("FetchPickAndPlace-v1")
+    env = FetchPickAndPlaceTwoEnv()
+    env = Fetch2Cubes(env)
     env.seed(seed)
+    np.random.seed(seed)
     test_set = []
     for i in range(TEST_EPS):
         state = env.reset()
-        state, goal = utils.save_state(env)
+        state, goal = u.save_state(env)
         test_set.append((state, goal))
+
 
     states, actions = get_experience(INITIAL_TRAIN_EPS, env)
     print("Normal states, actions ", len(states), len(actions))
@@ -106,18 +124,18 @@ def go(seed, file):
     xm = x.mean()
     xs = x.std()
     x = (x - x.mean())/x.std()
-    
+
     a = np.array(actions)
     am = a.mean()
     ast = a.std()
     a = (a - a.mean())/a.std()
 
     net.train(x, a, BC_BS, BC_EPS)
-    
-    result_t = test(net, test_set, env, xm, xs, am, ast, False)
+
+    result_t = test(net, test_set, env, xm, xs, am, ast, RENDER_TEST)
     print("Normal learning results ", seed, " : ", result_t)
     file.write(str("Normal learning results " + str(seed) + " : " + str(result_t)))
-    
+
 
 
 if __name__ == "__main__":
@@ -126,10 +144,10 @@ if __name__ == "__main__":
     print(filename)
     with open(filename, "a+") as file:
         for k in range(10):
-            print(str(hyperp))
-            print(str(k))
-            file.write(str(hyperp))
-            file.write("\n\n")
-            go(k, file)
-
-    
+            for full_expl in [False]:
+                print("FULL EXPL", full_expl, "\n")
+                print(str(hyperp))
+                print(str(k))
+                file.write(str(hyperp))
+                file.write("\n\n")
+                go(k, file)

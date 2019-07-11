@@ -45,6 +45,7 @@ def go_to_goal(state, cube = 0, norm = False, go_up = 0, curr_goal = None):
     return action, 1
 
 def controller(state, picked, in_position, norm = True):
+    action, steps = np.array([0.,0.,0.,0.]), 1 #placeholder
     cube_pos0 = state["achieved_goal"][:3]
     cube_pos1 = state["achieved_goal"][3:6]
     robot_pos = state["observation"][:3]
@@ -99,7 +100,6 @@ def controller(state, picked, in_position, norm = True):
                     picked[1] = True
 
             else:
-                print("here 2")
                 if np.linalg.norm(cube_pos1[:2] - state["desired_goal"][:2]).__lt__(0.03): alligned_z = True
                 if not alligned_z:
                     #use this to reach the goal from above and avoid touching
@@ -107,7 +107,6 @@ def controller(state, picked, in_position, norm = True):
                     action, steps = go_to_goal(state, cube, norm, go_up = False, curr_goal = state["desired_goal"] + np.array([0.,0.,0.2]))
                 #    if np.linalg.norm(diff0[:2]).__lt__(0.01): alligned_z = True
                 else:
-                    print("Here", cube)
                     action, steps = go_to_goal(state, cube, norm, curr_goal = state["desired_goal"])
                     if np.linalg.norm(cube_pos1[:] - state["desired_goal"][:]).__lt__(0.1):
                         in_position[1] = True
@@ -157,8 +156,8 @@ def get_demo(env, state, norm = False, render = False):
             if render: env.render()
             actions.append(action)
             state = new_state
-#        if not np.linalg.norm((state["achieved_goal"]- state["desired_goal"])) > 0.05:
-#            break
+        if not np.linalg.norm((state["achieved_goal"][:3]- state["desired_goal"])) > 0.03 and not np.linalg.norm((state["achieved_goal"][3:6]- state["desired_goal"])) > 0.07:
+            break
     return states, actions
 
 

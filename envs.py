@@ -134,3 +134,6 @@ class Fetch2Cubes():
             'achieved_goal': achieved_goal.copy(),
             'desired_goal': self.goal.copy(),
         }
+
+    def seed(self, seed):
+        self.env.seed(seed)
