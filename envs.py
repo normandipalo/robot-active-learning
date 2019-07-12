@@ -67,7 +67,7 @@ class Fetch2Cubes():
         # Randomize start position of object.
         if self.has_object:
             object_xpos0 = self.initial_gripper_xpos[:2]
-            while np.linalg.norm(object_xpos0 - self.initial_gripper_xpos[:2]) < 0.1:
+            while np.linalg.norm(object_xpos0 - self.initial_gripper_xpos[:2]) < 0.1 or np.linalg.norm(object_xpos0 - self.goal[:2]) < 0.2:
                 object_xpos0 = self.initial_gripper_xpos[:2] + self.np_random.uniform(-self.obj_range, self.obj_range, size=2)
             object_qpos0 = self.sim.data.get_joint_qpos('object0:joint')
             assert object_qpos0.shape == (7,)
