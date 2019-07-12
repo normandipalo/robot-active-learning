@@ -23,7 +23,7 @@ def robot_reset(env):
 def robot_random_pick(env):
     #Pick the cube and bring arm to random pos.
     state = env.reset()
-    state = man_controller.get_demo_cam_random_pick(env, state, norm = True, render = RENDER_ACT_EXP)
+    state = man_controller.get_demo_cam_random_pick(env, state, norm = True, render = RENDER_ACT_EXP, stage = np.random.randint(0, 3))
     return state
 
 def get_experience(eps, env):
@@ -148,7 +148,7 @@ if __name__ == "__main__":
     print(filename)
     with open(filename, "a+") as file:
         for k in range(10):
-            for full_expl in [False]:
+            for full_expl in [True]:
                 print("FULL EXPL", full_expl, "\n")
                 print(str(hyperp))
                 print(str(k))

@@ -53,6 +53,15 @@ def controller(state, picked, in_position, norm = True):
     if cube_pos1[2] > 0.43: picked[1] = True
     diff0 = cube_pos0 - robot_pos
     diff1 = cube_pos1 - robot_pos
+    #Check to see if the demo start from when the robot has places the first cube.
+    # In that case, move away from it before continuing.
+    if np.linalg.norm(cube_pos0[:] - state["desired_goal"][:]).__lt__(0.03) and np.linalg.norm(cube_pos0 - robot_pos).__lt__(0.03):
+        action, steps = np.array([0.,0.,0.5,1.]), 5
+        in_position[0] = True
+        return action, steps
+    elif np.linalg.norm(cube_pos0[:] - state["desired_goal"][:]).__lt__(0.03):
+        in_position[0] = True
+
     if not in_position[0]:
         cube = 0
         alligned_z = 0
@@ -196,14 +205,21 @@ def get_demo_cam_full(env, c_state, norm = False, render = False):
             break
     return states, rob_states, actions
 
-def get_demo_cam_random_pick(env, c_state, norm = False, render = False):
+def get_demo_cam_random_pick(env, c_state, norm = False, render = False, stage = 0):
     #Used to pick the cube and go to a random position,
     # to then obtain a demo from that state.
     state = copy.copy(c_state)
-    picked = [False]
+    picked = [False, False]
+    in_position = [False, False]
+    #These are the stages from which I want to have a demo.
+    # 0: got first cube in hand - 1: put first cube in place - 2: have second cube in hand
+    # It is divided into two binary numbers. Pick-In post and Cube1 or Cube2
+    st0 = stage%2
+    st1 = stage//2
+    possible_stages = [picked, in_position]
     for i in range(100):
-        if picked[0] == True: break
-        action, steps = controller(state, picked, norm)
+        if possible_stages[st0][st1] == True: break
+        action, steps = controller(state, picked, in_position, norm)
         for s in range(steps):
             #Concat im rgb and depth.
             new_state, _, _, _ = env.step(action)
