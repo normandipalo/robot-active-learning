@@ -1,10 +1,10 @@
-hyperp = {"INITIAL_TRAIN_EPS" : 60,
+hyperp = {"INITIAL_TRAIN_EPS" : 400,
 
 "BC_LR" : 1e-3,
-"BC_HD" : 128,
+"BC_HD" : 256,
 "BC_HL" : 2,
 "BC_BS" : 64,
-"BC_EPS" : 400,
+"BC_EPS" : 1000,
 
 "AE_HD" : 8,
 "AE_HL" : 2,
@@ -12,18 +12,18 @@ hyperp = {"INITIAL_TRAIN_EPS" : 60,
 "AE_BS" : 64,
 "AE_EPS" : 10,
 
-"TEST_EPS" : 300,
+"TEST_EPS" : 50,
 "ACTIVE_STEPS_RETRAIN" : 5,
 "ACTIVE_ERROR_THR" : 1.15,
 
 "ORG_TRAIN_SPLIT" : .5,
 "FULL_TRAJ_ERROR" : False,
 "CTRL_NORM" : True,
-"RENDER_TEST" : False,
+"RENDER_TEST" : True,
 "RENDER_ACT_EXP" : False,
 "TAKE_MAX" : True,
 "AE_RESTART" : True,
-"MAX_ACT_STEPS" : 100}
+"MAX_ACT_STEPS" : 200}
 
 INITIAL_TRAIN_EPS = hyperp["INITIAL_TRAIN_EPS"]
 BC_LR = hyperp["BC_LR"]

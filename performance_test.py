@@ -23,16 +23,21 @@ def robot_reset(env):
 def robot_random_pick(env):
     #Pick the cube and bring arm to random pos.
     state = env.reset()
-    state = man_controller.get_demo_cam_random_pick(env, state, norm = True, render = RENDER_TEST)
+    state = man_controller.get_demo_cam_random_pick(env, state, norm = True, render = RENDER_ACT_EXP)
     return state
 
 def get_experience(eps, env):
+    #global test_set
     states, actions = [], []
     for ep in range(eps):
         state = env.reset()
+        #Remove to not include in training set.
+    #    state_, goal = u.save_state(env)
+    #    test_set.append((state_, goal))
+
         if full_expl:
             state = robot_reset(env) if ep%2==0 else robot_random_pick(env)
-        new_states, new_acts = man_controller.get_demo(env, state, norm = True, render = RENDER_TEST)
+        new_states, new_acts = man_controller.get_demo(env, state, norm = True, render = RENDER_ACT_EXP)
 
         states+=new_states
         actions+=new_acts
@@ -58,7 +63,7 @@ def test(model, test_set, env, xm, xs, am, ast, render = False):
             if render: env.render()
             state = new_state
 
-            if not np.linalg.norm((state["achieved_goal"][:3]- state["desired_goal"])) > 0.05 and not np.linalg.norm((state["achieved_goal"][3:6]- state["achieved_goal"][:3])) > 0.05:# \
+            if not np.linalg.norm((state["achieved_goal"][:3]- state["desired_goal"])) > 0.07 and not np.linalg.norm((state["achieved_goal"][3:6]- state["achieved_goal"][:3])) > 0.07:# \
     #         and not np.linalg.norm((state["achieved_goal"][5]- state["achieved_goal"][2])) > 0.03:
         #        print("SUCCESS!")
                 succeded = 1
@@ -131,11 +136,10 @@ def go(seed, file):
     a = (a - a.mean())/a.std()
 
     net.train(x, a, BC_BS, BC_EPS)
-
+    input("Ready?")
     result_t = test(net, test_set, env, xm, xs, am, ast, RENDER_TEST)
     print("Normal learning results ", seed, " : ", result_t)
     file.write(str("Normal learning results " + str(seed) + " : " + str(result_t)))
-
 
 
 if __name__ == "__main__":
@@ -150,4 +154,6 @@ if __name__ == "__main__":
                 print(str(k))
                 file.write(str(hyperp))
                 file.write("\n\n")
+                start = time.time()
                 go(k, file)
+                print("Experiment took ", (time.time() - start)/60, " minutes.")
