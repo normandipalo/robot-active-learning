@@ -5,12 +5,19 @@ import math
 import time
 import datetime
 from time import gmtime, strftime
+from fetch_env_two_obj.fetch.pick_and_place import FetchPickAndPlaceTwoEnv
 
 import model
 from ae import *
 import man_controller
-import utils
+import utils as u
 from hparams import *
+from envs import *
+
+def is_success(state):
+    if not np.linalg.norm((state["achieved_goal"][:3]- state["desired_goal"])) > 0.07 and not np.linalg.norm((state["achieved_goal"][3:6]- state["achieved_goal"][:3])) > 0.07:
+        return True
+    return False
 
 def robot_reset(env):
     random_act = np.random.randn(4)*0.3
@@ -64,7 +71,7 @@ def try_complete(model, ae, error_thr, env, xm, xs, am, ast, render = False):
         if render: env.render()
         state = new_state
 
-        if not np.linalg.norm((state["achieved_goal"]- state["desired_goal"])) > 0.10:
+        if is_success(state):
     #        print("SUCCESS!")
             return True, env, state, error
 
@@ -76,7 +83,7 @@ def test(model, test_set, env, xm, xs, am, ast, render = False):
     for i in range(len(test_set)):
         succeded = 0
         env.reset()
-        env = utils.set_state(env, test_set[i][0], test_set[i][1])
+        env = u.set_state(env, test_set[i][0], test_set[i][1])
         state, *_ = env.step([0.,0.,0.,0.])
         picked = [False]
         for i in range(100):
@@ -90,7 +97,7 @@ def test(model, test_set, env, xm, xs, am, ast, render = False):
             if render: env.render()
             state = new_state
 
-            if not np.linalg.norm((state["achieved_goal"]- state["desired_goal"])) > 0.10:
+            if is_success(state):
         #        print("SUCCESS!")
                 succeded = 1
                 successes +=1
@@ -122,6 +129,7 @@ def get_active_exp2(env, avg_error_trainset, model, ae, xm, xs, am, ast, render,
 
     #Recursively call until a demo works.
     while len(new_states) > 100:
+        print("retry")
         #If it's so long the demo failed.
         #Should consider to reset it and try again, otherwise we waste a demo.
         new_states, new_acts = get_active_exp2(env, avg_error_trainset, model, ae, xm, xs, am, ast, render, take_max = False, max_act_steps = 20)
@@ -168,7 +176,7 @@ def get_active_exp(env, threshold, ae, xm, xs, render, take_max = False, max_act
             error = ae.error((np.concatenate((state["observation"],
                                             state["achieved_goal"],
                                             state["desired_goal"])).reshape((1,-1)) - xm)/xs)
-            s, g = utils.save_state(env)
+            s, g = u.save_state(env)
             errs_states.append([s, g, error])
 
         max_error = -1000
@@ -178,7 +186,7 @@ def get_active_exp(env, threshold, ae, xm, xs, render, take_max = False, max_act
                 max_error = errs_states[el][2]
                 max_key = el
 
-        new_env = utils.set_state(env, errs_states[max_key][0], errs_states[max_key][1])
+        new_env = u.set_state(env, errs_states[max_key][0], errs_states[max_key][1])
         state, *_ = new_env.step(np.zeros(4))
 
         new_states, new_acts = man_controller.get_demo(new_env, state, CTRL_NORM, render)
@@ -189,14 +197,15 @@ def get_active_exp(env, threshold, ae, xm, xs, render, take_max = False, max_act
 def go(seed, file):
 
     tf.random.set_seed(seed)
-    env = gym.make("FetchPickAndPlace-v1")
+    env = FetchPickAndPlaceTwoEnv()
+    env = Fetch2Cubes(env)
     env.seed(seed)
     np.random.seed(seed)
     test_set = []
     for i in range(TEST_EPS):
         state = env.reset()
         state = robot_reset(env)
-        state, goal = utils.save_state(env)
+        state, goal = u.save_state(env)
         test_set.append((state, goal))
 
     states, actions = get_experience(INITIAL_TRAIN_EPS, env, RENDER_TEST)
@@ -225,7 +234,8 @@ def go(seed, file):
 
     ## Active Learning Part ###
     tf.random.set_seed(seed)
-    env = gym.make("FetchPickAndPlace-v1")
+    env = FetchPickAndPlaceTwoEnv()
+    env = Fetch2Cubes(env)
     env.seed(seed)
     np.random.seed(seed)
 
@@ -260,7 +270,7 @@ def go(seed, file):
 
         #if AE_RESTART: ae = DAE(31, AE_HD, AE_HL, AE_LR, set_seed = seed)
         #Reinitialize both everytime and retrain.
-        ae = RandomNetwork(31, AE_HD, AE_HL, AE_LR, set_seed = seed)
+        ae = DAE(states[0].shape[0], AE_HD, AE_HL, AE_LR, set_seed = seed)
         net_hf = model.BCModel(states[0].shape[0], actions[0].shape[0], BC_HD, BC_HL, BC_LR, set_seed = seed)
 
         start = time.time()
@@ -273,7 +283,7 @@ def go(seed, file):
 
         for j in range(ACTIVE_STEPS_RETRAIN):
             #new_s, new_a = get_active_exp(env, ACTIVE_ERROR_THR, ae, xm, xs, RENDER_ACT_EXP, TAKE_MAX, MAX_ACT_STEPS)
-            new_s, new_a = get_active_exp2(env, avg_error, net_hf, ae, xm, xs, am, ast, RENDER_TEST, TAKE_MAX, MAX_ACT_STEPS)
+            new_s, new_a = get_active_exp2(env, avg_error, net_hf, ae, xm, xs, am, ast, RENDER_ACT_EXP, TAKE_MAX, MAX_ACT_STEPS)
             print("len new s ", len(new_s), " len new a ", len(new_a))
             states+=new_s
             actions+=new_a
@@ -309,7 +319,7 @@ if __name__ == "__main__":
     with open(filename, "a+") as file:
         print(str(hyperp))
         file.write(str(hyperp))
-        for k in range(0,50):
+        for k in range(4,50):
             print(str(k))
             file.write("\n" + str(k))
             file.write("\n\n")
