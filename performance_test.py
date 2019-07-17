@@ -136,7 +136,6 @@ def go(seed, file):
     a = (a - a.mean())/a.std()
 
     net.train(x, a, BC_BS, BC_EPS)
-    input("Ready?")
     result_t = test(net, test_set, env, xm, xs, am, ast, RENDER_TEST)
     print("Normal learning results ", seed, " : ", result_t)
     file.write(str("Normal learning results " + str(seed) + " : " + str(result_t)))

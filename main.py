@@ -116,7 +116,7 @@ def get_active_exp2(env, avg_error_trainset, model, ae, xm, xs, am, ast, render,
         state = env.reset()
         state = robot_reset(env)
         #Credo che dovrei resettare lo stato qua, altrimenti prova a completare sempre lo stesso.
-        succeded, env, state, error = try_complete(model, ae, avg_error_trainset*1.1, env, xm, xs, am, ast, render = RENDER_TEST)
+        succeded, env, state, error = try_complete(model, ae, avg_error_trainset*ACTIVE_ERROR_THR, env, xm, xs, am, ast, render = RENDER_TEST)
     #Here we have the env and the state where the robot doesn't know what to do.
     time.sleep(1.)
 #    print("Expert demo.")
@@ -319,7 +319,7 @@ if __name__ == "__main__":
     with open(filename, "a+") as file:
         print(str(hyperp))
         file.write(str(hyperp))
-        for k in range(4,50):
+        for k in range(7,50):
             print(str(k))
             file.write("\n" + str(k))
             file.write("\n\n")

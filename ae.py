@@ -160,25 +160,26 @@ class RandomNetwork(tf.keras.Model):
 
         self.opt = tf.keras.optimizers.Adam(learning_rate = lr)
 
-    #@tf.function
+    @tf.function
     def call(self, x):
         for l in self._layers:
             x = l(x)
         return x
 
+    @tf.function
     def call_rand(self, x):
         for l in self.r_layers:
             x = l(x)
         return x
 
-    #@tf.function
+    @tf.function
     def error(self, x):
         y = self.call(x)
         y_r = self.call_rand(x)
         return tf.reduce_sum(tf.losses.mean_squared_error(y,y_r))
 
 
-    #@tf.function
+    @tf.function
     def _loss(self, x, y):
         return tf.reduce_mean(tf.losses.mean_squared_error(y, x)) #.mean_squared_error(y, x)
 
@@ -192,6 +193,18 @@ class RandomNetwork(tf.keras.Model):
         ds = ds.batch(batch_size)
         return ds
 
+    @tf.function
+    def train_step(self, el, print_loss = False, verbose = False):
+        with tf.GradientTape() as tape:
+            x = el
+            y_pred = self.call(x)
+            y_rand = self.call_rand(x)
+            loss = self._loss(y_pred, tf.stop_gradient(y_rand))
+
+        grads = tape.gradient(loss, self.variables)
+        self.opt.apply_gradients(zip(grads, self.variables))
+        if print_loss: print(loss)
+
     def train(self, x, batch_size, epochs, print_loss = False, verbose = False):
         if self.set_seed:
             tf.random.set_seed(self.set_seed)
@@ -199,15 +212,8 @@ class RandomNetwork(tf.keras.Model):
         for i,el in enumerate(ds):
             if verbose:
                 if i%1000==0: print("Element ", i)
-            with tf.GradientTape() as tape:
-                x = el
-                y_pred = self.call(x)
-                y_rand = self.call_rand(x)
-                loss = self._loss(y_pred, tf.stop_gradient(y_rand))
+            self.train_step(el, print_loss, verbose)
 
-            grads = tape.gradient(loss, self.variables)
-            self.opt.apply_gradients(zip(grads, self.variables))
-            if print_loss: print(loss)
 
 
 class ConvAE(tf.keras.Model):
