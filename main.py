@@ -14,6 +14,12 @@ import utils as u
 from hparams import *
 from envs import *
 
+def robot_random_pick(env):
+    #Pick the cube and bring arm to random pos.
+    state = env.reset()
+    state = man_controller.get_demo_cam_random_pick(env, state, norm = True, render = RENDER_ACT_EXP, stage = np.random.randint(0, 3))
+    return state
+
 def is_success(state):
     if not np.linalg.norm((state["achieved_goal"][:3]- state["desired_goal"])) > 0.07 and not np.linalg.norm((state["achieved_goal"][3:6]- state["achieved_goal"][:3])) > 0.07:
         return True
@@ -140,7 +146,7 @@ def get_active_exp(env, threshold, ae, xm, xs, render, take_max = False, max_act
     err_avg = 0
     for i in range(20):
         state = env.reset()
-        state = robot_reset(env)
+        state = robot_reset(env) if i%2==0 else robot_random_pick(env)
         error = ae.error((np.concatenate((state["observation"],
                                     state["achieved_goal"],
                                     state["desired_goal"])).reshape((1,-1)) - xm)/xs)
@@ -153,12 +159,15 @@ def get_active_exp(env, threshold, ae, xm, xs, render, take_max = False, max_act
                                     state["desired_goal"])).reshape((1,-1)) - xm)/xs)
     #print("predicted error", error)
 
+    k = True
     if not take_max:
         tried = 0
         while not error > threshold*err_avg:
+            k = not k
             tried+=1
             state = env.reset()
-            state = robot_reset(env)
+            #state = robot_reset(env)
+            state = robot_reset(env) if k else robot_random_pick(env)
             error = ae.error((np.concatenate((state["observation"],
                                             state["achieved_goal"],
                                             state["desired_goal"])).reshape((1,-1)) - xm)/xs)
@@ -190,6 +199,12 @@ def get_active_exp(env, threshold, ae, xm, xs, render, take_max = False, max_act
         state, *_ = new_env.step(np.zeros(4))
 
         new_states, new_acts = man_controller.get_demo(new_env, state, CTRL_NORM, render)
+
+        while len(new_states) > 100:
+            print("retry")
+            #If it's so long the demo failed.
+            #Should consider to reset it and try again, otherwise we waste a demo.
+            new_states, new_acts = get_active_exp(env, threshold, ae, xm, xs, render, take_max = False, max_act_steps = 20)
 
         return new_states, new_acts
 
@@ -282,8 +297,8 @@ def go(seed, file):
         print(time.time() - start)
 
         for j in range(ACTIVE_STEPS_RETRAIN):
-            #new_s, new_a = get_active_exp(env, ACTIVE_ERROR_THR, ae, xm, xs, RENDER_ACT_EXP, TAKE_MAX, MAX_ACT_STEPS)
-            new_s, new_a = get_active_exp2(env, avg_error, net_hf, ae, xm, xs, am, ast, RENDER_ACT_EXP, TAKE_MAX, MAX_ACT_STEPS)
+            new_s, new_a = get_active_exp(env, ACTIVE_ERROR_THR, ae, xm, xs, RENDER_ACT_EXP, TAKE_MAX, MAX_ACT_STEPS)
+            #new_s, new_a = get_active_exp2(env, avg_error, net_hf, ae, xm, xs, am, ast, RENDER_ACT_EXP, TAKE_MAX, MAX_ACT_STEPS)
             print("len new s ", len(new_s), " len new a ", len(new_a))
             states+=new_s
             actions+=new_a
