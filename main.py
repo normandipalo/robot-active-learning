@@ -43,6 +43,7 @@ def get_experience(eps, env, render = False):
     states, actions = [], []
     for ep in range(eps):
         state = env.reset()
+        state = robot_reset(env) if ep%2==0 else robot_random_pick(env)
         #state = robot_reset(env)
         new_states, new_acts = man_controller.get_demo(env, state, CTRL_NORM, render)
         states+=new_states
@@ -134,7 +135,7 @@ def get_active_exp2(env, avg_error_trainset, model, ae, xm, xs, am, ast, render,
 #        return [], []
 
     #Recursively call until a demo works.
-    while len(new_states) > 100:
+    while len(new_states) > 150:
         print("retry")
         #If it's so long the demo failed.
         #Should consider to reset it and try again, otherwise we waste a demo.
@@ -142,7 +143,7 @@ def get_active_exp2(env, avg_error_trainset, model, ae, xm, xs, am, ast, render,
     return new_states, new_acts
 
 def get_active_exp(env, threshold, ae, xm, xs, render, take_max = False, max_act_steps = 20):
-
+    print(take_max)
     err_avg = 0
     for i in range(20):
         state = env.reset()
@@ -172,7 +173,7 @@ def get_active_exp(env, threshold, ae, xm, xs, render, take_max = False, max_act
                                             state["achieved_goal"],
                                             state["desired_goal"])).reshape((1,-1)) - xm)/xs)
       #      print("predicted error", error.numpy(), err_avg.numpy())
-     #   print("Tried ", tried, " initial states")
+        print("Tried ", tried, " initial states")
         new_states, new_acts = man_controller.get_demo(env, state, CTRL_NORM, render)
 
         return new_states, new_acts
@@ -181,7 +182,7 @@ def get_active_exp(env, threshold, ae, xm, xs, render, take_max = False, max_act
         errs_states = []
         for k in range(max_act_steps):
             state = env.reset()
-            state = robot_reset(env)
+            state = robot_reset(env) if k%2==0 else robot_random_pick(env)
             error = ae.error((np.concatenate((state["observation"],
                                             state["achieved_goal"],
                                             state["desired_goal"])).reshape((1,-1)) - xm)/xs)
@@ -200,11 +201,12 @@ def get_active_exp(env, threshold, ae, xm, xs, render, take_max = False, max_act
 
         new_states, new_acts = man_controller.get_demo(new_env, state, CTRL_NORM, render)
 
-        while len(new_states) > 100:
+        while len(new_states) > 150:
+            print(len(new_states))
             print("retry")
             #If it's so long the demo failed.
             #Should consider to reset it and try again, otherwise we waste a demo.
-            new_states, new_acts = get_active_exp(env, threshold, ae, xm, xs, render, take_max = False, max_act_steps = 20)
+            new_states, new_acts = get_active_exp(env, threshold, ae, xm, xs, render, take_max, max_act_steps)
 
         return new_states, new_acts
 
@@ -230,15 +232,14 @@ def go(seed, file):
     x = np.array(states)
     xm = x.mean()
     xs = x.std()
-    x = (x - x.mean())/x.std()
+    x = (x - xm)/xs
 
     a = np.array(actions)
     am = a.mean()
     ast = a.std()
-    a = (a - a.mean())/a.std()
+    a = (a - am)/ast
 
     start = time.time()
-    print("TEST")
     print(x.shape)
     net.train(x, a, BC_BS, BC_EPS)
     print("Training took:")
@@ -260,12 +261,12 @@ def go(seed, file):
     x = np.array(states)
     xm = x.mean()
     xs = x.std()
-    x = (x - x.mean())/x.std()
+    x = (x - xm)/xs
 
     a = np.array(actions)
     am = a.mean()
     ast = a.std()
-    a = (a - a.mean())/a.std()
+    a = (a - am)/ast
     net_hf.train(x, a, BC_BS, BC_EPS*2)
 
     #get_experience(int(INITIAL_TRAIN_EPS*ORG_TRAIN_SPLIT), env)
@@ -276,17 +277,19 @@ def go(seed, file):
         x = np.array(states)
         xm = x.mean()
         xs = x.std()
-        x = (x - x.mean())/x.std()
+        x = (x - xm)/xs
 
         a = np.array(actions)
         am = a.mean()
         ast = a.std()
-        a = (a - a.mean())/a.std()
+        a = (a - am)/ast
 
         #if AE_RESTART: ae = DAE(31, AE_HD, AE_HL, AE_LR, set_seed = seed)
         #Reinitialize both everytime and retrain.
+
         ae = DAE(states[0].shape[0], AE_HD, AE_HL, AE_LR, set_seed = seed)
         net_hf = model.BCModel(states[0].shape[0], actions[0].shape[0], BC_HD, BC_HL, BC_LR, set_seed = seed)
+
 
         start = time.time()
         ae.train(x, AE_BS, AE_EPS)
@@ -299,19 +302,19 @@ def go(seed, file):
         for j in range(ACTIVE_STEPS_RETRAIN):
             new_s, new_a = get_active_exp(env, ACTIVE_ERROR_THR, ae, xm, xs, RENDER_ACT_EXP, TAKE_MAX, MAX_ACT_STEPS)
             #new_s, new_a = get_active_exp2(env, avg_error, net_hf, ae, xm, xs, am, ast, RENDER_ACT_EXP, TAKE_MAX, MAX_ACT_STEPS)
-            print("len new s ", len(new_s), " len new a ", len(new_a))
+    #        print("len new s ", len(new_s), " len new a ", len(new_a))
             states+=new_s
             actions+=new_a
 
     x = np.array(states)
     xm = x.mean()
     xs = x.std()
-    x = (x - x.mean())/x.std()
+    x = (x - xm)/xs
 
     a = np.array(actions)
     am = a.mean()
     ast = a.std()
-    a = (a - a.mean())/a.std()
+    a = (a - am)/ast
 
     print("Active states, actions ", len(states), len(actions))
 
@@ -334,7 +337,7 @@ if __name__ == "__main__":
     with open(filename, "a+") as file:
         print(str(hyperp))
         file.write(str(hyperp))
-        for k in range(7,50):
+        for k in range(0,50):
             print(str(k))
             file.write("\n" + str(k))
             file.write("\n\n")
