@@ -247,7 +247,7 @@ def go(seed):
     states, actions = get_experience(INITIAL_TRAIN_EPS, env)
     print("Normal states, actions ", len(states), len(actions))
     file.write("Normal states, actions " + str(len(states)) + str(len(actions)))
-    net = model.BCModel(states[0].shape[0], actions[0].shape[0], BC_HD, BC_HL, BC_LR)
+    net = model.BCModelDropout(states[0].shape[0], actions[0].shape[0], BC_HD, BC_HL, BC_LR)
 
     x = np.array(states)
     xm = x.mean(axis = 0)
@@ -260,10 +260,10 @@ def go(seed):
     a = (a - am)/ast
 
     net.train(x, a, BC_BS, BC_EPS)
+    ae = net
+    #ae = DAE(31, AE_HD, AE_HL, AE_LR)
 
-    ae = AE(31, AE_HD, AE_HL, AE_LR)
-
-    ae.train(x, AE_BS, AE_EPS)
+    #ae.train(x, AE_BS, AE_EPS)
 
     tot_error_trainset = 0
     for el in x:
