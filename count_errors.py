@@ -5,19 +5,22 @@ import math
 import time
 import datetime
 from time import gmtime, strftime
+from fetch_env_two_obj.fetch.pick_and_place import FetchPickAndPlaceTwoEnv
 
 import model
 from ae import *
 import man_controller
-import utils
+import utils as u
+from hparams import *
+from envs import *
 
-hyperp = {"INITIAL_TRAIN_EPS" : 70,
+hyperp = {"INITIAL_TRAIN_EPS" : 400,
 
 "BC_LR" : 1e-3,
 "BC_HD" : 128,
 "BC_HL" : 2,
-"BC_BS" : 64,
-"BC_EPS" : 400,
+"BC_BS" : 32,
+"BC_EPS" : 1000,
 
 "AE_HD" : 8,
 "AE_HL" : 2,
@@ -28,12 +31,12 @@ hyperp = {"INITIAL_TRAIN_EPS" : 70,
 "TEST_EPS" : 100,
 "ACTIVE_STEPS_RETRAIN" : 10,
 "ACTIVE_ERROR_THR" : 1.5,
-"ERROR_THR_PRED" : 4,
+"ERROR_THR_PRED" : 1.3,
 
 "ORG_TRAIN_SPLIT" : 1.,
-"FULL_TRAJ_ERROR" : True,
+"FULL_TRAJ_ERROR" : False,
 "CTRL_NORM" : True,
-"RENDER_TEST" : True}
+"RENDER_TEST" : False}
 
 INITIAL_TRAIN_EPS = hyperp["INITIAL_TRAIN_EPS"]
 BC_LR = hyperp["BC_LR"]
@@ -77,7 +80,7 @@ def test(model, ae, test_set, env, xm, xs, am, ast, fulltraj = False, render = F
     for i in range(len(test_set)):
         succeded = 0
         env.reset()
-        env = utils.set_state(env, test_set[i][0], test_set[i][1])
+        env = u.set_state(env, test_set[i][0], test_set[i][1])
         state, *_ = env.step([0.,0.,0.,0.])
         picked = [False]
 
@@ -105,7 +108,7 @@ def test(model, ae, test_set, env, xm, xs, am, ast, fulltraj = False, render = F
                                     state["desired_goal"])).reshape((1,-1)) - xm)/xs)
                 tot_error+=error
 
-            if not np.linalg.norm((state["achieved_goal"]- state["desired_goal"])) > 0.07:
+            if not np.linalg.norm((state["achieved_goal"][:3]- state["desired_goal"])) > 0.07 and not np.linalg.norm((state["achieved_goal"][3:6]- state["achieved_goal"][:3])) > 0.07:
           #      print("SUCCESS!")
                 succeded = 1
                 successes +=1
@@ -137,7 +140,7 @@ def predict(model, ae, test_set, env, xm, xs, am, ast, tot_error_trainset):
     for i in range(len(test_set)):
 
         env.reset()
-        env = utils.set_state(env, test_set[i][0], test_set[i][1])
+        env = u.set_state(env, test_set[i][0], test_set[i][1])
         state, *_ = env.step([0.,0.,0.,0.])
         picked = [False]
         succeded = False
@@ -148,7 +151,7 @@ def predict(model, ae, test_set, env, xm, xs, am, ast, tot_error_trainset):
         # If not FULL_TRAJ predict directly the outcome. Otherwise, predict success and eventually
         # correct to failure if the error becomes too high.
         if not FULL_TRAJ:
-            if error > tot_error_trainset:
+            if error > ERROR_THR_PRED*tot_error_trainset:
                 prediction = "failure"
             else:
                 prediction = "success"
@@ -170,13 +173,12 @@ def predict(model, ae, test_set, env, xm, xs, am, ast, tot_error_trainset):
                                             state["desired_goal"])).reshape((1,-1)) - xm)/xs)
                 if error > ERROR_THR_PRED*tot_error_trainset:
                     prediction = "failure"
-                    print("PREDICTED FAILURE")
-                    print(np.random.randn())
+
                     #break #Should not break, because it could solve it even if it thinks it won't
 
             state = new_state
 
-            if not np.linalg.norm((state["achieved_goal"]- state["desired_goal"])) > 0.07:
+            if not np.linalg.norm((state["achieved_goal"][:3]- state["desired_goal"])) > 0.07 and not np.linalg.norm((state["achieved_goal"][3:6]- state["achieved_goal"][:3])) > 0.07:
           #      print("SUCCESS!")
                 successes += 1
                 succeded = True
@@ -233,19 +235,21 @@ def get_active_exp(env, threshold, ae, xm, xs, render):
 
 def go(seed):
     tf.random.set_seed(seed)
-    env = gym.make("FetchPickAndPlace-v1")
+    env = FetchPickAndPlaceTwoEnv()
+    env = Fetch2Cubes(env)
     env.seed(seed)
+    np.random.seed(seed)
 
     test_set = []
     for i in range(TEST_EPS):
         state = env.reset()
-        state, goal = utils.save_state(env)
+        state, goal = u.save_state(env)
         test_set.append((state, goal))
 
     states, actions = get_experience(INITIAL_TRAIN_EPS, env)
     print("Normal states, actions ", len(states), len(actions))
     file.write("Normal states, actions " + str(len(states)) + str(len(actions)))
-    net = model.BCModel(states[0].shape[0], actions[0].shape[0], BC_HD, BC_HL, BC_LR)
+    net = model.BCModelDropout(states[0].shape[0], actions[0].shape[0], BC_HD, BC_HL, BC_LR)
 
     x = np.array(states)
     xm = x.mean()
@@ -259,16 +263,21 @@ def go(seed):
 
     net.train(x, a, BC_BS, BC_EPS)
 
-    ae = AE(31, AE_HD, AE_HL, AE_LR)
+    ae = DAE(states[0].shape[0], AE_HD, AE_HL, AE_LR)
     #ae = RandomNetwork(1, AE_HD, AE_HL, AE_LR)
 
     ae.train(x, AE_BS, AE_EPS)
 
+    #ae = net
     tot_error_trainset = 0
     for el in x:
         error = ae.error(el.reshape((1,-1)))
         tot_error_trainset+=error
     tot_error_trainset/=len(x)
+
+    env.seed(seed)
+    np.random.seed(seed)
+    tf.random.set_seed(seed)
 
     print("Average error on train set", tot_error_trainset)
     file.write(str("Average error on train set") +str(tot_error_trainset))
@@ -292,7 +301,9 @@ def go(seed):
   #  file.write(str("Active learning results " + str(seed) + " : " + str(result_t)))
 
 
-
+    env.seed(seed)
+    np.random.seed(seed)
+    tf.random.set_seed(seed)
     succ_tp, succ_fp, succ_tn, succ_fn = predict(net, ae, test_set, env, xm, xs, am, ast, tot_error_trainset)
 
     #change to consider failures
@@ -300,10 +311,15 @@ def go(seed):
     fail, succ = succ, fail
 
     print("succ tp, fp, tn, fn", succ_tp, succ_fp, succ_tn, succ_fn)
+    file.write(str("\n" + str("succ tp, fp, tn, fn") + str(succ_tp) + str(succ_fp) + str(succ_tn) + str(succ_fn)))
     precision = (succ_tp/(succ_tp+succ_fp + 0.001))
     recall = (succ_tp/(succ_tp+succ_fn))
+    print("precision ", precision, "recall", recall)
     print("F1 score", (2*precision*recall/(precision + recall)))
     print("F1 for all positives",  (2*(succ/(succ + fail))*1/((succ/(succ + fail)) + 1)))
+    file.write(str("F1 score") + str((2*precision*recall/(precision + recall))))
+    file.write(str("\n"))
+    file.write(str("F1 for all positives") + str((2*(succ/(succ + fail))*1/((succ/(succ + fail)) + 1))))
     return (2*precision*recall/(precision + recall)), 2*(succ/(succ + fail))*1/((succ/(succ + fail)) + 1)
 
 
@@ -327,4 +343,4 @@ if __name__ == "__main__":
         print("Average F1", f1s/5)
         file.write("Average F1 " + str(f1s/5))
         print("Average F1 baseline", f1s_base/5)
-        file.write("Average F1 " + str(f1s_base/5))
+        file.write("Average F1 baseline" + str(f1s_base/5))
