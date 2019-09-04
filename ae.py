@@ -271,18 +271,19 @@ class ConvAE(tf.keras.Model):
             if print_loss: print(loss)
 
 class FutureUnc():
-    def __init__(self, policy_net, dyn_net, unc_net):
+    def __init__(self, policy_net, dyn_net, unc_net, steps = 5):
         self.policy_net = policy_net
         self.dyn_net = dyn_net
         self.unc_net = unc_net
-
+        self.steps = steps
+        
     def train(self, *args, **kwargs):
         pass
 
-    def error(self, x, steps = 5):
+    def error(self, x):
 
         uncs_on_fut = []
-        for st in range(steps):
+        for st in range(self.steps):
             x = np.array(x)
             action = self.policy_net(x)
             action = np.array(action)

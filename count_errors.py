@@ -8,6 +8,7 @@ from time import gmtime, strftime
 
 import model
 from ae import *
+from future_model import *
 import man_controller
 import utils
 
@@ -28,12 +29,12 @@ hyperp = {"INITIAL_TRAIN_EPS" : 70,
 "TEST_EPS" : 100,
 "ACTIVE_STEPS_RETRAIN" : 10,
 "ACTIVE_ERROR_THR" : 1.5,
-"ERROR_THR_PRED" : 4,
+"ERROR_THR_PRED" : 8.,
 
 "ORG_TRAIN_SPLIT" : 1.,
 "FULL_TRAJ_ERROR" : True,
 "CTRL_NORM" : True,
-"RENDER_TEST" : True}
+"RENDER_TEST" : False}
 
 INITIAL_TRAIN_EPS = hyperp["INITIAL_TRAIN_EPS"]
 BC_LR = hyperp["BC_LR"]
@@ -134,8 +135,9 @@ def test(model, ae, test_set, env, xm, xs, am, ast, fulltraj = False, render = F
 def predict(model, ae, test_set, env, xm, xs, am, ast, tot_error_trainset):
     succ_tp, succ_fp, succ_tn, succ_fn = 0,0,0,0
     successes, failures = 0, 0
+    steps_to_stop = []
     for i in range(len(test_set)):
-
+        steps = 0
         env.reset()
         env = utils.set_state(env, test_set[i][0], test_set[i][1])
         state, *_ = env.step([0.,0.,0.,0.])
@@ -156,6 +158,7 @@ def predict(model, ae, test_set, env, xm, xs, am, ast, tot_error_trainset):
       #  prediction = "success" #assume you think you'll always succeed
 
         for i in range(100):
+            if prediction == "success": steps+=1
             action = model((np.concatenate((state["observation"],
                                         state["achieved_goal"],
                                         state["desired_goal"])).reshape((1,-1)) - xm)/xs)
@@ -170,8 +173,8 @@ def predict(model, ae, test_set, env, xm, xs, am, ast, tot_error_trainset):
                                             state["desired_goal"])).reshape((1,-1)) - xm)/xs)
                 if error > ERROR_THR_PRED*tot_error_trainset:
                     prediction = "failure"
-                    print("PREDICTED FAILURE")
-                    print(np.random.randn())
+                    #print("PREDICTED FAILURE")
+                    #print(np.random.randn())
                     #break #Should not break, because it could solve it even if it thinks it won't
 
             state = new_state
@@ -192,10 +195,12 @@ def predict(model, ae, test_set, env, xm, xs, am, ast, tot_error_trainset):
             failures += 1
             if prediction == "failure":
                 succ_tn +=1
+                steps_to_stop.append(steps)
             elif prediction == "success":
                 succ_fp += 1
 
     print("successes, failures", successes, failures)
+    print("steps to stop", steps_to_stop, np.array(steps_to_stop).mean())
     return succ_tp, succ_fp, succ_tn, succ_fn
 
 
@@ -245,7 +250,7 @@ def go(seed):
     states, actions = get_experience(INITIAL_TRAIN_EPS, env)
     print("Normal states, actions ", len(states), len(actions))
     file.write("Normal states, actions " + str(len(states)) + str(len(actions)))
-    net = model.BCModel(states[0].shape[0], actions[0].shape[0], BC_HD, BC_HL, BC_LR)
+    net = model.BCModelDropout(states[0].shape[0], actions[0].shape[0], BC_HD, BC_HL, BC_LR)
 
     x = np.array(states)
     xm = x.mean()
@@ -258,11 +263,17 @@ def go(seed):
     a = (a - a.mean())/a.std()
 
     net.train(x, a, BC_BS, BC_EPS)
+    obs_dim, act_dim = len(x[0]), len(a[0])
+    norm = Normalizer(obs_dim, act_dim).fit(x[:-1], a[:-1], x[1:])
 
-    ae = AE(31, AE_HD, AE_HL, AE_LR)
+    dyn = NNDynamicsModel(obs_dim, act_dim, 128, norm, 64, 500, 3e-4)
+    dyn.fit({"states": x[:-1], "acts" : a[:-1], "next_states" : x[1:]}, plot = False)
+
+    ae_x = AE(31, AE_HD, AE_HL, AE_LR)
     #ae = RandomNetwork(1, AE_HD, AE_HL, AE_LR)
 
-    ae.train(x, AE_BS, AE_EPS)
+    ae_x.train(x, AE_BS, AE_EPS)
+    ae = FutureUnc(net, dyn, ae_x, steps = 3)
 
     tot_error_trainset = 0
     for el in x:
