@@ -275,3 +275,28 @@ class ConvAE(tf.keras.Model):
             grads = tape.gradient(loss, self.variables)
             self.opt.apply_gradients(zip(grads, self.variables))
             if print_loss: print(loss)
+
+class FutureUnc():
+    def __init__(self, policy_net, dyn_net, unc_net):
+        self.policy_net = policy_net
+        self.dyn_net = dyn_net
+        self.unc_net = unc_net
+
+    def train(self, *args, **kwargs):
+        pass
+
+    def error(self, x, steps = 5):
+
+        uncs_on_fut = []
+        for st in range(steps):
+            x = np.array(x)
+            action = self.policy_net(x)
+            action = np.array(action)
+            next_state_pred = self.dyn_net.predict(x.reshape((1,-1)), action.reshape((1,-1)), True)
+
+            unc_on_fut = self.unc_net.error(next_state_pred)
+            uncs_on_fut.append(unc_on_fut)
+
+            x = next_state_pred
+
+        return np.array(uncs_on_fut).mean()
