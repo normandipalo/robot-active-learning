@@ -11,6 +11,7 @@ from ae import *
 import man_controller
 import utils
 from hparams import *
+from future_model import *
 
 def robot_reset(env):
     random_act = np.random.randn(4)*0.3
@@ -109,7 +110,7 @@ def get_active_exp2(env, avg_error_trainset, model, ae, xm, xs, am, ast, render,
         state = env.reset()
         state = robot_reset(env)
         #Credo che dovrei resettare lo stato qua, altrimenti prova a completare sempre lo stesso.
-        succeded, env, state, error = try_complete(model, ae, avg_error_trainset*1.1, env, xm, xs, am, ast, render = RENDER_TEST)
+        succeded, env, state, error = try_complete(model, ae, avg_error_trainset*ACTIVE_ERROR_THR, env, xm, xs, am, ast, render = RENDER_TEST)
     #Here we have the env and the state where the robot doesn't know what to do.
     time.sleep(1.)
 #    print("Expert demo.")
@@ -260,11 +261,20 @@ def go(seed, file):
 
         #if AE_RESTART: ae = DAE(31, AE_HD, AE_HL, AE_LR, set_seed = seed)
         #Reinitialize both everytime and retrain.
-        ae = RandomNetwork(31, AE_HD, AE_HL, AE_LR, set_seed = seed)
+        norm = Normalizer(31, 4).fit(x[:-1], a[:-1], x[1:])
+
+        dyn = NNDynamicsModel(31, 4, 128, norm, 64, 500, 3e-4)
+        dyn.fit({"states": x[:-1], "acts" : a[:-1], "next_states" : x[1:]}, plot = False)
+
+        ae_x = AE(31, AE_HD, AE_HL, AE_LR)
+        #ae = RandomNetwork(1, AE_HD, AE_HL, AE_LR)
+
+        ae_x.train(x, AE_BS, AE_EPS)
+        ae = FutureUnc(net, dyn, ae_x, steps = 5)
         net_hf = model.BCModel(states[0].shape[0], actions[0].shape[0], BC_HD, BC_HL, BC_LR, set_seed = seed)
 
         start = time.time()
-        ae.train(x, AE_BS, AE_EPS)
+
         net_hf.train(x, a, BC_BS, BC_EPS*2)
         avg_error = avg_ae_error(ae, x)
 
@@ -274,7 +284,7 @@ def go(seed, file):
         for j in range(ACTIVE_STEPS_RETRAIN):
             #new_s, new_a = get_active_exp(env, ACTIVE_ERROR_THR, ae, xm, xs, RENDER_ACT_EXP, TAKE_MAX, MAX_ACT_STEPS)
             new_s, new_a = get_active_exp2(env, avg_error, net_hf, ae, xm, xs, am, ast, RENDER_TEST, TAKE_MAX, MAX_ACT_STEPS)
-            print("len new s ", len(new_s), " len new a ", len(new_a))
+            #print("len new s ", len(new_s), " len new a ", len(new_a))
             states+=new_s
             actions+=new_a
 

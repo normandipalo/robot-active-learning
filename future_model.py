@@ -75,7 +75,8 @@ class DynNet(tf.keras.Model):
         self.call(tf.convert_to_tensor(np.random.randn(1, self.n_inp)))
         for var in self.variables:
             if not "bias" in var.name:
-                print(var.shape)
+                #print(var.shape)
+                pass
 
     def call(self, x):
    #     x = tf.convert_to_tensor(x)
@@ -133,9 +134,9 @@ class NNDynamicsModel():
 
         #obtain deltas
         delta_states = (next_states - states)
-        print("states shape", states.shape)
-        print("acts shape", acts.shape)
-        print("delta states shape", delta_states.shape)
+    #    print("states shape", states.shape)
+    #    print("acts shape", acts.shape)
+    #    print("delta states shape", delta_states.shape)
 
 
         state_mean = self.norm_dict["state_mean"]
@@ -147,13 +148,13 @@ class NNDynamicsModel():
 
 
         #be sure state_mean = (1, state_dim)
-        print("states mean shape", state_mean.shape, state_std.shape)
+    #    print("states mean shape", state_mean.shape, state_std.shape)
         states = (states - state_mean)/state_std
 
-        print("acts mean shape", act_mean.shape, act_std.shape)
+    #    print("acts mean shape", act_mean.shape, act_std.shape)
         acts = (acts - act_mean)/act_std
 
-        print("delta_states mean shape", delta_state_mean.shape, delta_state_std.shape)
+    #    print("delta_states mean shape", delta_state_mean.shape, delta_state_std.shape)
         delta_states = (delta_states - delta_state_mean)/delta_state_std
 
         #concatenate states and actions along axis 1 to create the real input
@@ -170,8 +171,8 @@ class NNDynamicsModel():
         val_indices = train_indices[-len(train_indices)//10:] #take last 10 percent so you sould always pick the new data
         train_indices = train_indices[: -len(train_indices)//10] #take first 90 percent
 
-        print("train indices shape", train_indices.shape)
-        print("eval indices shape", val_indices.shape)
+    #    print("train indices shape", train_indices.shape)
+    #    print("eval indices shape", val_indices.shape)
 
         if plot:
             losses = []
@@ -209,9 +210,9 @@ class NNDynamicsModel():
                 out = self.network(tf.convert_to_tensor(input_batch))
                 loss = tf.reduce_mean(tf.losses.mean_squared_error(output_batch, out))
                 val_loss.append(loss)
-                print(loss)
+        #        print(loss)
 
-        print("Validation average loss", np.array(val_loss).mean())
+        #print("Validation average loss", np.array(val_loss).mean())
 
 
 
