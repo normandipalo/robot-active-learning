@@ -334,7 +334,7 @@ if __name__ == "__main__":
     with open(filename, "a+") as file:
         print(str(hyperp))
         file.write(str(hyperp))
-        for k in range(7,50):
+        for k in range(9,50):
             print(str(k))
             file.write("\n" + str(k))
             file.write("\n\n")
