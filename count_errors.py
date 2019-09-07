@@ -9,6 +9,7 @@ from fetch_env_two_obj.fetch.pick_and_place import FetchPickAndPlaceTwoEnv
 
 import model
 from ae import *
+from future_model import *
 import man_controller
 import utils as u
 from hparams import *
@@ -31,10 +32,10 @@ hyperp = {"INITIAL_TRAIN_EPS" : 400,
 "TEST_EPS" : 100,
 "ACTIVE_STEPS_RETRAIN" : 10,
 "ACTIVE_ERROR_THR" : 1.5,
-"ERROR_THR_PRED" : 1.3,
+"ERROR_THR_PRED" : 2.2,
 
 "ORG_TRAIN_SPLIT" : 1.,
-"FULL_TRAJ_ERROR" : False,
+"FULL_TRAJ_ERROR" : True,
 "CTRL_NORM" : True,
 "RENDER_TEST" : False}
 
@@ -67,7 +68,7 @@ def get_experience(eps, env):
     states, actions = [], []
     for ep in range(eps):
         state = env.reset()
-        new_states, new_acts = man_controller.get_demo(env, state, CTRL_NORM)
+        new_states, new_acts = man_controller.get_demo(env, state, CTRL_NORM, render = RENDER_TEST)
         states+=new_states
         actions+=new_acts
 
@@ -137,8 +138,9 @@ def test(model, ae, test_set, env, xm, xs, am, ast, fulltraj = False, render = F
 def predict(model, ae, test_set, env, xm, xs, am, ast, tot_error_trainset):
     succ_tp, succ_fp, succ_tn, succ_fn = 0,0,0,0
     successes, failures = 0, 0
+    steps_to_stop = []
     for i in range(len(test_set)):
-
+        steps = 0
         env.reset()
         env = u.set_state(env, test_set[i][0], test_set[i][1])
         state, *_ = env.step([0.,0.,0.,0.])
@@ -159,6 +161,7 @@ def predict(model, ae, test_set, env, xm, xs, am, ast, tot_error_trainset):
       #  prediction = "success" #assume you think you'll always succeed
 
         for i in range(100):
+            if prediction == "success": steps+=1
             action = model((np.concatenate((state["observation"],
                                         state["achieved_goal"],
                                         state["desired_goal"])).reshape((1,-1)) - xm)/xs)
@@ -194,10 +197,12 @@ def predict(model, ae, test_set, env, xm, xs, am, ast, tot_error_trainset):
             failures += 1
             if prediction == "failure":
                 succ_tn +=1
+                steps_to_stop.append(steps)
             elif prediction == "success":
                 succ_fp += 1
 
     print("successes, failures", successes, failures)
+    print("steps to stop", steps_to_stop, np.array(steps_to_stop).mean())
     return succ_tp, succ_fp, succ_tn, succ_fn
 
 
@@ -249,7 +254,7 @@ def go(seed):
     states, actions = get_experience(INITIAL_TRAIN_EPS, env)
     print("Normal states, actions ", len(states), len(actions))
     file.write("Normal states, actions " + str(len(states)) + str(len(actions)))
-    net = model.BCModelDropout(states[0].shape[0], actions[0].shape[0], BC_HD, BC_HL, BC_LR)
+    net = model.BCModel(states[0].shape[0], actions[0].shape[0], BC_HD, BC_HL, BC_LR)
 
     x = np.array(states)
     xm = x.mean()
@@ -261,12 +266,21 @@ def go(seed):
     ast = a.std()
     a = (a - a.mean())/a.std()
 
+    start = time.time()
     net.train(x, a, BC_BS, BC_EPS)
+    print("Policy trained in", time.time() - start)
+    obs_dim, act_dim = len(x[0]), len(a[0])
+    norm = Normalizer(obs_dim, act_dim).fit(x[:-1], a[:-1], x[1:])
 
-    ae = DAE(states[0].shape[0], AE_HD, AE_HL, AE_LR)
+    start = time.time()
+    dyn = NNDynamicsModel(obs_dim, act_dim, 128, norm, 64, 100, 3e-4)
+    dyn.fit({"states": x[:-1], "acts" : a[:-1], "next_states" : x[1:]}, plot = False)
+    print("Dynamics model trained in", time.time() - start)
+    #ae = DAE(states[0].shape[0], AE_HD, AE_HL, AE_LR)
+    ae_x = AE(states[0].shape[0], AE_HD, AE_HL, AE_LR)
     #ae = RandomNetwork(1, AE_HD, AE_HL, AE_LR)
-
-    ae.train(x, AE_BS, AE_EPS)
+    ae_x.train(x, AE_BS, AE_EPS)
+    ae = FutureUnc(net, dyn, ae_x, steps = 5)
 
     #ae = net
     tot_error_trainset = 0
@@ -331,16 +345,18 @@ if __name__ == "__main__":
     with open(filename, "a+") as file:
         f1s = 0
         f1s_base = 0
-        for k in range(5):
+        for k in range(3):
             print(str(hyperp))
             print(str(k))
             file.write(str(hyperp))
             file.write("\n\n")
             with tf.device("/device:CPU:0"):
+                start_go = time.time()
                 f1s_i, f1s_base_i = go(k)
+                print("\n \n Whole experiment took", time.time() - start_go, "\n \n")
                 f1s += f1s_i
                 f1s_base += f1s_base_i
-        print("Average F1", f1s/5)
-        file.write("Average F1 " + str(f1s/5))
-        print("Average F1 baseline", f1s_base/5)
-        file.write("Average F1 baseline" + str(f1s_base/5))
+        print("Average F1", f1s/3)
+        file.write("Average F1 " + str(f1s/3))
+        print("Average F1 baseline", f1s_base/3)
+        file.write("Average F1 baseline" + str(f1s_base/3))

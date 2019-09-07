@@ -9,6 +9,7 @@ from fetch_env_two_obj.fetch.pick_and_place import FetchPickAndPlaceTwoEnv
 
 import model
 from ae import *
+from future_model import *
 import man_controller
 import utils as u
 from hparams import *
@@ -143,7 +144,6 @@ def get_active_exp2(env, avg_error_trainset, model, ae, xm, xs, am, ast, render,
     return new_states, new_acts
 
 def get_active_exp(env, threshold, ae, xm, xs, render, take_max = False, max_act_steps = 20):
-    print(take_max)
     err_avg = 0
     for i in range(20):
         state = env.reset()
@@ -287,12 +287,21 @@ def go(seed, file):
         #if AE_RESTART: ae = DAE(31, AE_HD, AE_HL, AE_LR, set_seed = seed)
         #Reinitialize both everytime and retrain.
 
-        ae = DAE(states[0].shape[0], AE_HD, AE_HL, AE_LR, set_seed = seed)
-        net_hf = model.BCModel(states[0].shape[0], actions[0].shape[0], BC_HD, BC_HL, BC_LR, set_seed = seed)
-
+        obs_dim, act_dim = len(x[0]), len(a[0])
+        norm = Normalizer(obs_dim, act_dim).fit(x[:-1], a[:-1], x[1:])
 
         start = time.time()
-        ae.train(x, AE_BS, AE_EPS)
+        dyn = NNDynamicsModel(obs_dim, act_dim, 128, norm, 64, 100, 3e-4)
+        dyn.fit({"states": x[:-1], "acts" : a[:-1], "next_states" : x[1:]}, plot = False)
+        print("Dynamics model trained in", time.time() - start)
+
+        ae_x = AE(states[0].shape[0], AE_HD, AE_HL, AE_LR, set_seed = seed)
+        #ae = RandomNetwork(1, AE_HD, AE_HL, AE_LR)
+        ae_x.train(x, AE_BS, AE_EPS)
+        ae = FutureUnc(net, dyn, ae_x, steps = 5)
+        net_hf = model.BCModel(states[0].shape[0], actions[0].shape[0], BC_HD, BC_HL, BC_LR, set_seed = seed)
+        start = time.time()
+    #    ae.train(x, AE_BS, AE_EPS)
         net_hf.train(x, a, BC_BS, BC_EPS*2)
         avg_error = avg_ae_error(ae, x)
 
@@ -300,8 +309,8 @@ def go(seed, file):
         print(time.time() - start)
 
         for j in range(ACTIVE_STEPS_RETRAIN):
-            new_s, new_a = get_active_exp(env, ACTIVE_ERROR_THR, ae, xm, xs, RENDER_ACT_EXP, TAKE_MAX, MAX_ACT_STEPS)
-            #new_s, new_a = get_active_exp2(env, avg_error, net_hf, ae, xm, xs, am, ast, RENDER_ACT_EXP, TAKE_MAX, MAX_ACT_STEPS)
+            #new_s, new_a = get_active_exp(env, ACTIVE_ERROR_THR, ae, xm, xs, RENDER_ACT_EXP, TAKE_MAX, MAX_ACT_STEPS)
+            new_s, new_a = get_active_exp2(env, avg_error, net_hf, ae, xm, xs, am, ast, RENDER_ACT_EXP, TAKE_MAX, MAX_ACT_STEPS)
     #        print("len new s ", len(new_s), " len new a ", len(new_a))
             states+=new_s
             actions+=new_a
@@ -337,7 +346,7 @@ if __name__ == "__main__":
     with open(filename, "a+") as file:
         print(str(hyperp))
         file.write(str(hyperp))
-        for k in range(0,50):
+        for k in range(8,10):
             print(str(k))
             file.write("\n" + str(k))
             file.write("\n\n")
