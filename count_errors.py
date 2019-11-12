@@ -5,6 +5,8 @@ import math
 import time
 import datetime
 from time import gmtime, strftime
+from metaworld.envs.mujoco.sawyer_xyz import *
+import sawyer_test
 
 import model
 from ae import *
@@ -12,7 +14,7 @@ from future_model import *
 import man_controller
 import utils
 
-hyperp = {"INITIAL_TRAIN_EPS" : 70,
+hyperp = {"INITIAL_TRAIN_EPS" : 100,
 
 "BC_LR" : 1e-3,
 "BC_HD" : 128,
@@ -34,7 +36,7 @@ hyperp = {"INITIAL_TRAIN_EPS" : 70,
 "ORG_TRAIN_SPLIT" : 1.,
 "FULL_TRAJ_ERROR" : True,
 "CTRL_NORM" : True,
-"RENDER_TEST" : False}
+"RENDER_TEST" : True}
 
 INITIAL_TRAIN_EPS = hyperp["INITIAL_TRAIN_EPS"]
 BC_LR = hyperp["BC_LR"]
@@ -65,13 +67,13 @@ def get_experience(eps, env):
     states, actions = [], []
     for ep in range(eps):
         state = env.reset()
-        new_states, new_acts = man_controller.get_demo(env, state, CTRL_NORM)
+        new_states, new_acts = man_controller.get_demo(env, state, CTRL_NORM, True)
         states+=new_states
         actions+=new_acts
 
     return states, actions
 
-def test(model, ae, test_set, env, xm, xs, am, ast, fulltraj = False, render = False):
+def test(model, ae, test_set, env, xm, xs, am, ast, fulltraj = False, render = True):
     successes, failures = 0,0
     error_succ, error_fail = 0.,0.
     succ_errors_list, fail_errors_list = [], []
@@ -82,15 +84,11 @@ def test(model, ae, test_set, env, xm, xs, am, ast, fulltraj = False, render = F
         state, *_ = env.step([0.,0.,0.,0.])
         picked = [False]
 
-        error = ae.error((np.concatenate((state["observation"],
-                                    state["achieved_goal"],
-                                    state["desired_goal"])).reshape((1,-1)) - xm)/xs)
+        error = ae.error((state[None] - xm)/xs)
         tot_error = error
         #print("Uncertainty ", error.numpy())
         for i in range(100):
-            action = model((np.concatenate((state["observation"],
-                                        state["achieved_goal"],
-                                        state["desired_goal"])).reshape((1,-1)) - xm)/xs)
+            action = model((state[None] - xm)/xs)
 
             action = action*ast + am
             new_state, *_ = env.step(action[0])
@@ -101,12 +99,11 @@ def test(model, ae, test_set, env, xm, xs, am, ast, fulltraj = False, render = F
             if fulltraj:
             #If I choose to sum up the errors of the entire trajectory I integrate errors
             # on tot_error
-                error = ae.error((np.concatenate((state["observation"],
-                                    state["achieved_goal"],
-                                    state["desired_goal"])).reshape((1,-1)) - xm)/xs)
+                error = ae.error((state[None] - xm)/xs)
                 tot_error+=error
 
-            if not np.linalg.norm((state["achieved_goal"]- state["desired_goal"])) > 0.07:
+            #if not np.linalg.norm((state["achieved_goal"]- state["desired_goal"])) > 0.07:
+            if sawyer_test.check_success(env, state):
           #      print("SUCCESS!")
                 succeded = 1
                 successes +=1
@@ -129,8 +126,10 @@ def test(model, ae, test_set, env, xm, xs, am, ast, fulltraj = False, render = F
             else:
                 error_fail += tot_error
                 fail_errors_list.append(tot_error)
-
-    return successes, failures, error_succ/successes, error_fail/failures, succ_errors_list, fail_errors_list
+    try:
+        return successes, failures, error_succ/successes, error_fail/failures, succ_errors_list, fail_errors_list
+    except:
+        return successes, failures, -1, -1, [-1], [-1]
 
 def predict(model, ae, test_set, env, xm, xs, am, ast, tot_error_trainset):
     succ_tp, succ_fp, succ_tn, succ_fn = 0,0,0,0
@@ -143,9 +142,7 @@ def predict(model, ae, test_set, env, xm, xs, am, ast, tot_error_trainset):
         state, *_ = env.step([0.,0.,0.,0.])
         picked = [False]
         succeded = False
-        error = ae.error((np.concatenate((state["observation"],
-                                    state["achieved_goal"],
-                                    state["desired_goal"])).reshape((1,-1)) - xm)/xs)
+        error = ae.error((state[None] - xm)/xs)
 
         # If not FULL_TRAJ predict directly the outcome. Otherwise, predict success and eventually
         # correct to failure if the error becomes too high.
@@ -159,18 +156,14 @@ def predict(model, ae, test_set, env, xm, xs, am, ast, tot_error_trainset):
 
         for i in range(100):
             if prediction == "success": steps+=1
-            action = model((np.concatenate((state["observation"],
-                                        state["achieved_goal"],
-                                        state["desired_goal"])).reshape((1,-1)) - xm)/xs)
+            action = model((state[None] - xm)/xs)
 
             action = action*ast + am
             new_state, *_ = env.step(action[0])
             if RENDER_TEST: env.render()
             if FULL_TRAJ:
                 # Checks at every step if the error becomes too high.
-                error = ae.error((np.concatenate((state["observation"],
-                                            state["achieved_goal"],
-                                            state["desired_goal"])).reshape((1,-1)) - xm)/xs)
+                error = ae.error((state[None] - xm)/xs)
                 if error > ERROR_THR_PRED*tot_error_trainset:
                     prediction = "failure"
                     #print("PREDICTED FAILURE")
@@ -179,7 +172,7 @@ def predict(model, ae, test_set, env, xm, xs, am, ast, tot_error_trainset):
 
             state = new_state
 
-            if not np.linalg.norm((state["achieved_goal"]- state["desired_goal"])) > 0.07:
+            if sawyer_test.check_success(env, state):
           #      print("SUCCESS!")
                 successes += 1
                 succeded = True
@@ -210,25 +203,19 @@ def get_active_exp(env, threshold, ae, xm, xs, render):
     err_avg = 0
     for i in range(20):
         state = env.reset()
-        error = ae.error((np.concatenate((state["observation"],
-                                    state["achieved_goal"],
-                                    state["desired_goal"])).reshape((1,-1)) - xm)/xs)
+        error = ae.error((state[None] - xm)/xs)
         err_avg+=error
     err_avg/=20
 
     state = env.reset()
-    error = ae.error((np.concatenate((state["observation"],
-                                    state["achieved_goal"],
-                                    state["desired_goal"])).reshape((1,-1)) - xm)/xs)
+    error = ae.error((state[None] - xm)/xs)
     #print("predicted error", error)
 
     tried = 0
     while not error > threshold*err_avg:
         tried+=1
         state = env.reset()
-        error = ae.error((np.concatenate((state["observation"],
-                                        state["achieved_goal"],
-                                        state["desired_goal"])).reshape((1,-1)) - xm)/xs)
+        error = ae.error((state[None] - xm)/xs)
   #      print("predicted error", error.numpy(), err_avg.numpy())
  #   print("Tried ", tried, " initial states")
     new_states, new_acts = man_controller.get_demo(env, state, CTRL_NORM, render)
@@ -238,7 +225,7 @@ def get_active_exp(env, threshold, ae, xm, xs, render):
 
 def go(seed):
     tf.random.set_seed(seed)
-    env = gym.make("FetchPickAndPlace-v1")
+    env = SawyerNutAssemblyEnv()
     env.seed(seed)
 
     test_set = []
@@ -269,7 +256,7 @@ def go(seed):
     dyn = NNDynamicsModel(obs_dim, act_dim, 128, norm, 64, 500, 3e-4)
     dyn.fit({"states": x[:-1], "acts" : a[:-1], "next_states" : x[1:]}, plot = False)
 
-    ae_x = AE(31, AE_HD, AE_HL, AE_LR)
+    ae_x = AE(9, AE_HD, AE_HL, AE_LR)
     #ae = RandomNetwork(1, AE_HD, AE_HL, AE_LR)
 
     ae_x.train(x, AE_BS, AE_EPS)
@@ -296,6 +283,7 @@ def go(seed):
 
         print("Average full trajectory error on train set", tot_error_train_fulltraj)
         file.write(str("Average full trajectory error on train set") + str(tot_error_train_fulltraj))
+    _ = input("Go?")
     succ, fail, error_avg_s, error_avg_f, succ_list, fail_list = test(net, ae, test_set, env, xm, xs, am, ast, fulltraj = FULL_TRAJ, render = RENDER_TEST)
     print("Active learning results ", seed, " : ", succ, fail, "avg error on succ trails: ", error_avg_s, "on fail: ", error_avg_f, "std on succ:", np.std(succ_list), "on fail:", np.std(fail_list))
     file.write(str("Active learning results ") + str(seed) +  str(" : ") + str(succ) + str(fail) + str(error_avg_s) + str(error_avg_f) + str(np.std(succ_list)) +  str(np.std(fail_list)))
