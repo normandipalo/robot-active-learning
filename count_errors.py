@@ -14,13 +14,13 @@ from future_model import *
 import man_controller
 import utils
 
-hyperp = {"INITIAL_TRAIN_EPS" : 100,
+hyperp = {"INITIAL_TRAIN_EPS" : 50,
 
 "BC_LR" : 1e-3,
 "BC_HD" : 128,
 "BC_HL" : 2,
 "BC_BS" : 64,
-"BC_EPS" : 400,
+"BC_EPS" : 1000,
 
 "AE_HD" : 8,
 "AE_HL" : 2,
@@ -62,15 +62,28 @@ RENDER_TEST = hyperp["RENDER_TEST"]
 ERROR_THR_PRED = hyperp["ERROR_THR_PRED"]
 
 #from hparams import *
-
+test_set = []
 def get_experience(eps, env):
+    global test_set
     states, actions = [], []
-    for ep in range(eps):
+    ep = 0
+    while ep < eps:
         state = env.reset()
-        new_states, new_acts = man_controller.get_demo(env, state, CTRL_NORM, True)
-        states+=new_states
-        actions+=new_acts
-
+        p_peg = utils.save_state(env)
+        dir = np.zeros(4)
+        dir[:3] = np.random.randn(3)*0.5
+        dir[2] = np.linalg.norm(dir[2])
+    #    for k in range(20):
+    #        env.step(dir)
+    #        env.render()
+        new_states, new_acts, success = man_controller.get_demo(env, state, CTRL_NORM, True)
+        if success:
+            test_set.append((p_peg))
+            ep+=1
+            states+=new_states
+            actions+=new_acts
+        if not success:
+            print("FAIL")
     return states, actions
 
 def test(model, ae, test_set, env, xm, xs, am, ast, fulltraj = False, render = True):
@@ -80,17 +93,19 @@ def test(model, ae, test_set, env, xm, xs, am, ast, fulltraj = False, render = T
     for i in range(len(test_set)):
         succeded = 0
         env.reset()
-        env = utils.set_state(env, test_set[i][0], test_set[i][1])
+
+        env = utils.set_state(env, test_set[i])
         state, *_ = env.step([0.,0.,0.,0.])
         picked = [False]
 
         error = ae.error((state[None] - xm)/xs)
         tot_error = error
         #print("Uncertainty ", error.numpy())
-        for i in range(100):
+        for i in range(500):
             action = model((state[None] - xm)/xs)
 
             action = action*ast + am
+            print(action)
             new_state, *_ = env.step(action[0])
          #   print(action)
             if render: env.render()
@@ -138,7 +153,7 @@ def predict(model, ae, test_set, env, xm, xs, am, ast, tot_error_trainset):
     for i in range(len(test_set)):
         steps = 0
         env.reset()
-        env = utils.set_state(env, test_set[i][0], test_set[i][1])
+        env = utils.set_state(env, test_set[i])
         state, *_ = env.step([0.,0.,0.,0.])
         picked = [False]
         succeded = False
@@ -154,7 +169,7 @@ def predict(model, ae, test_set, env, xm, xs, am, ast, tot_error_trainset):
         else: prediction = "success"
       #  prediction = "success" #assume you think you'll always succeed
 
-        for i in range(100):
+        for i in range(2000):
             if prediction == "success": steps+=1
             action = model((state[None] - xm)/xs)
 
@@ -228,40 +243,42 @@ def go(seed):
     env = SawyerNutAssemblyEnv()
     env.seed(seed)
 
-    test_set = []
-    for i in range(TEST_EPS):
-        state = env.reset()
-        state, goal = utils.save_state(env)
-        test_set.append((state, goal))
+    global test_set #= []
+#    for i in range(TEST_EPS):
+#        state = env.reset()
+#        state, goal = utils.save_state(env)
+#        test_set.append((state, goal))
 
     states, actions = get_experience(INITIAL_TRAIN_EPS, env)
     print("Normal states, actions ", len(states), len(actions))
     file.write("Normal states, actions " + str(len(states)) + str(len(actions)))
-    net = model.BCModelDropout(states[0].shape[0], actions[0].shape[0], BC_HD, BC_HL, BC_LR)
+    net = model.BCModel(states[0].shape[0], actions[0].shape[0], BC_HD, BC_HL, BC_LR)
 
     x = np.array(states)
-    xm = x.mean()
-    xs = x.std()
-    x = (x - x.mean())/x.std()
+    xm = x.mean(0)
+    xs = x.std(0)
+    x = (x - x.mean(0))/x.std(0)
+    #xm, xs = 0,1
 
     a = np.array(actions)
-    am = a.mean()
-    ast = a.std()
-    a = (a - a.mean())/a.std()
+    am = a.mean(0)
+    ast = a.std(0)
+    a = (a - a.mean(0))/a.std(0)
+    #am, ast = 0, 1
 
     net.train(x, a, BC_BS, BC_EPS)
     obs_dim, act_dim = len(x[0]), len(a[0])
-    norm = Normalizer(obs_dim, act_dim).fit(x[:-1], a[:-1], x[1:])
+#    norm = Normalizer(obs_dim, act_dim).fit(x[:-1], a[:-1], x[1:])
 
-    dyn = NNDynamicsModel(obs_dim, act_dim, 128, norm, 64, 500, 3e-4)
-    dyn.fit({"states": x[:-1], "acts" : a[:-1], "next_states" : x[1:]}, plot = False)
+#    dyn = NNDynamicsModel(obs_dim, act_dim, 128, norm, 64, 500, 3e-4)
+#    dyn.fit({"states": x[:-1], "acts" : a[:-1], "next_states" : x[1:]}, plot = False)
 
     ae_x = AE(9, AE_HD, AE_HL, AE_LR)
     #ae = RandomNetwork(1, AE_HD, AE_HL, AE_LR)
 
     ae_x.train(x, AE_BS, AE_EPS)
-    ae = FutureUnc(net, dyn, ae_x, steps = 3)
-
+#    ae = FutureUnc(net, dyn, ae_x, steps = 3)
+    ae = ae_x
     tot_error_trainset = 0
     for el in x:
         error = ae.error(el.reshape((1,-1)))
