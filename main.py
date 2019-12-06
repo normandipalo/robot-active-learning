@@ -109,7 +109,6 @@ def get_active_exp2(env, avg_error_trainset, model, ae, xm, xs, am, ast, render,
     while succeded:
         state = env.reset()
         state = robot_reset(env)
-        #Credo che dovrei resettare lo stato qua, altrimenti prova a completare sempre lo stesso.
         succeded, env, state, error = try_complete(model, ae, avg_error_trainset*ACTIVE_ERROR_THR, env, xm, xs, am, ast, render = RENDER_TEST)
     #Here we have the env and the state where the robot doesn't know what to do.
     time.sleep(1.)
