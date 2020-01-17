@@ -1,4 +1,4 @@
-hyperp = {"INITIAL_TRAIN_EPS" : 200,
+hyperp = {"INITIAL_TRAIN_EPS" : 100,
 
 "BC_LR" : 1e-3,
 "BC_HD" : 128,
@@ -12,7 +12,7 @@ hyperp = {"INITIAL_TRAIN_EPS" : 200,
 "AE_BS" : 64,
 "AE_EPS" : 10,
 
-"TEST_EPS" : 100,
+"TEST_EPS" : 40,
 "ACTIVE_STEPS_RETRAIN" : 25,
 "ACTIVE_ERROR_THR" : 1.1,
 
@@ -23,7 +23,10 @@ hyperp = {"INITIAL_TRAIN_EPS" : 200,
 "RENDER_ACT_EXP" : False,
 "TAKE_MAX" : True,
 "AE_RESTART" : True,
-"MAX_ACT_STEPS" : 200}
+"MAX_ACT_STEPS" : 200,
+"W1" : .7,
+"W2" : 0.3,
+"W" : 1.}
 
 INITIAL_TRAIN_EPS = hyperp["INITIAL_TRAIN_EPS"]
 BC_LR = hyperp["BC_LR"]
@@ -50,3 +53,6 @@ RENDER_TEST = hyperp["RENDER_TEST"]
 RENDER_ACT_EXP = hyperp["RENDER_ACT_EXP"]
 TAKE_MAX = hyperp["TAKE_MAX"]
 MAX_ACT_STEPS = hyperp["MAX_ACT_STEPS"]
+W1 = hyperp["W1"]
+W2 = hyperp["W2"]
+W = hyperp["W"]

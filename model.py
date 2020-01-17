@@ -191,6 +191,73 @@ class ConvBCModel(tf.keras.Model):
             if print_loss: print(loss)
 
 
+class BCPlanner(tf.keras.Model):
+    def __init__(self, bc_model, dyn_model, unc_model, action_size, w1_expl, w2_expl, w_den):
+        super(BCPlanner, self).__init__()
+        self.dyn_model = dyn_model
+        self.unc_model = unc_model
+        self.action_size = action_size
+        self.bc_model = bc_model
+        self.w1, self.w2, self.w = w1_expl, w2_expl, w_den
+
+    def plan_step(self, state, minimize = True):
+        x = np.array(state)
+        if minimize:
+            min_unc = 1e8
+            best_action = np.zeros(self.action_size)
+            for i in range(50):
+                action = np.random.randn(5, self.action_size)
+                tot_unc = 0
+                for j in range(5):
+
+                    next_state_pred = self.dyn_model.predict(x.reshape((1,-1)), action[j].reshape((1,-1)), True)
+                    unc_on_fut = self.unc_model.error(next_state_pred)
+                    tot_unc+=unc_on_fut.numpy()
+                #print("Future Uncertainty", unc_on_fut)
+                if tot_unc < min_unc:
+                    min_unc = tot_unc
+                    best_action = action[0]
+            return best_action, min_unc
+        else:
+            max_unc = -1e6
+            best_action = np.zeros(self.action_size)
+            for i in range(50):
+                action = np.random.randn(5, self.action_size)
+                tot_unc = 0
+                for j in range(5):
+                    next_state_pred = self.dyn_model.predict(x.reshape((1,-1)), action[j].reshape((1,-1)), True)
+                    unc_on_fut = self.unc_model.error(next_state_pred)
+                    tot_unc+=unc_on_fut.numpy()
+                #print("Future Uncertainty", unc_on_fut)
+                if tot_unc > max_unc:
+                    max_unc = tot_unc
+                    best_action = action[0]
+            return best_action
+
+
+    def train(self, x, y, batch_size, epochs, print_loss = False, verbose = False):
+        self.bc_model.train(x, y, batch_size, epochs, print_loss, verbose)
+
+    def call(self, x, minimize = True):
+        action = self.bc_model.call(x)
+        if minimize:
+            correction, unc = self.plan_step(x, minimize)
+        else:
+            correction = self.plan_step(x, minimize)
+        #print("action and correction", action, correction)
+        if minimize:
+            weight = unc/self.w
+            weight = np.clip(weight, 0, 0.8)
+            #print("unc", unc)
+            coin = np.random.randint(0,5)
+            if coin == 0:
+                #return (1-weight)*action + weight*correction # + correction
+                return self.w1*action + self.w2*correction # + correction
+            else: return action
+        else:
+            return self.w1*action + self.w2*correction
+
+
 
 class ConvHybridNet(tf.keras.Model):
     def __init__(self, im_size, action_size, n_channels, hid_layers, k_sizes, common_filters, dec_filters, lr, set_seed = None):

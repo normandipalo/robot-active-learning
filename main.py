@@ -44,7 +44,7 @@ def get_experience(eps, env, render = False):
     states, actions = [], []
     for ep in range(eps):
         state = env.reset()
-        state = robot_reset(env) if ep%2==0 else robot_random_pick(env)
+        #state = robot_reset(env) if ep%2==0 else robot_random_pick(env)
         #state = robot_reset(env)
         new_states, new_acts = man_controller.get_demo(env, state, CTRL_NORM, render)
         states+=new_states
@@ -94,7 +94,7 @@ def test(model, test_set, env, xm, xs, am, ast, render = False):
         env = u.set_state(env, test_set[i][0], test_set[i][1])
         state, *_ = env.step([0.,0.,0.,0.])
         picked = [False]
-        for i in range(100):
+        for i in range(150):
             action = model((np.concatenate((state["observation"],
                                         state["achieved_goal"],
                                         state["desired_goal"])).reshape((1,-1)) - xm)/xs)
@@ -255,6 +255,8 @@ def go(seed, file):
     env.seed(seed)
     np.random.seed(seed)
 
+    """
+
     states, actions = states[:math.floor(len(states)*ORG_TRAIN_SPLIT)], actions[:math.floor(len(actions)*ORG_TRAIN_SPLIT)]
     #Train behavior net on half data.
     net_hf = model.BCModel(states[0].shape[0], actions[0].shape[0], BC_HD, BC_HL, BC_LR, set_seed = seed)
@@ -334,8 +336,24 @@ def go(seed, file):
     print("Active learning results ", seed, " : ", result_t)
     file.write(str("Active learning results " + str(seed) + " : " + str(result_t)))
 
+    """
     #print("Active learning results ", seed, " : ",test(net, test_set, env, xm, xs, am, ast, True))
 
+    start = time.time()
+    norm = Normalizer(49, 4).fit(x[:-1], a[:-1], x[1:])
+
+    dyn = NNDynamicsModel(49, 4, 128, norm, 64, 2000, 3e-4)
+    dyn.fit({"states": x[:-1], "acts" : a[:-1], "next_states" : x[1:]}, plot = False)
+
+    ae_x = DAE(49, AE_HD, AE_HL, AE_LR)
+    ae_x.train(x, AE_BS, AE_EPS)
+    net = model.BCPlanner(net, dyn, ae_x, 4, W1, W2, W)
+    print("Training took:")
+    print(time.time() - start)
+
+    result_t = test(net, test_set, env, xm, xs, am, ast, RENDER_TEST)
+    print("PLANNING: Active learning results ", seed, " : ", result_t)
+    file.write(str("PLANNING: Active learning results " + str(seed) + " : " + str(result_t)))
 
 
 
