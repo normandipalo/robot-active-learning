@@ -1,29 +1,30 @@
-hyperp = {"INITIAL_TRAIN_EPS" : 60,
+hyperp = {"INITIAL_TRAIN_EPS" : 40,
 
 "BC_LR" : 1e-3,
 "BC_HD" : 128,
 "BC_HL" : 2,
 "BC_BS" : 64,
-"BC_EPS" : 400,
+"BC_EPS" : 500,
 
 "AE_HD" : 8,
 "AE_HL" : 2,
 "AE_LR" : 1e-3,
 "AE_BS" : 64,
-"AE_EPS" : 10,
+"AE_EPS" : 20,
 
-"TEST_EPS" : 300,
+"TEST_EPS" : 50,
 "ACTIVE_STEPS_RETRAIN" : 5,
-"ACTIVE_ERROR_THR" : 6.,
+"ACTIVE_ERROR_THR" : 3.,
 
-"ORG_TRAIN_SPLIT" : 0.5,
+"ORG_TRAIN_SPLIT" : 0.75,
 "FULL_TRAJ_ERROR" : True,
 "CTRL_NORM" : True,
-"RENDER_TEST" : False,
-"RENDER_ACT_EXP" : False,
+"RENDER_TEST" : True,
+"RENDER_ACT_EXP" : True,
 "TAKE_MAX" : True,
 "AE_RESTART" : True,
-"MAX_ACT_STEPS" : 100}
+"MAX_ACT_STEPS" : 100,
+"DISABLE_NORM" : False}
 
 INITIAL_TRAIN_EPS = hyperp["INITIAL_TRAIN_EPS"]
 BC_LR = hyperp["BC_LR"]
@@ -50,3 +51,4 @@ RENDER_TEST = hyperp["RENDER_TEST"]
 RENDER_ACT_EXP = hyperp["RENDER_ACT_EXP"]
 TAKE_MAX = hyperp["TAKE_MAX"]
 MAX_ACT_STEPS = hyperp["MAX_ACT_STEPS"]
+DISABLE_NORM = hyperp["DISABLE_NORM"]

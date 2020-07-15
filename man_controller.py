@@ -5,9 +5,9 @@ import sawyer_test
 def get_demo(env, state, norm = False, render = False):
     states, actions = [], []
     picked = [False]
-    check_bits = np.zeros(4)
+    check_bits = np.zeros(5)
     success = False
-    for i in range(400):
+    for i in range(1000):
         cb = sawyer_test.check(env, state, check_bits)
         action, steps = sawyer_test.get_act(env, state, cb, norm)
         for s in range(steps):
@@ -17,6 +17,7 @@ def get_demo(env, state, norm = False, render = False):
             actions.append(action)
             state = new_state
         if sawyer_test.check_success(env, state):
+        #    print("Success!")
             success = True
             break
     return states, actions, success

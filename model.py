@@ -1,7 +1,7 @@
 import tensorflow as tf
 import numpy as np
 from utils import *
-
+import matplotlib.pyplot as plt
 
 
 class BCModel(tf.keras.Model):
@@ -41,26 +41,34 @@ class BCModel(tf.keras.Model):
         #ds = ds.prefetch(tf.data.experimental.AUTOTUNE)
         return ds
 
-    def train(self, x, y, batch_size, epochs, print_loss = False, verbose = False):
+    def train(self, x, y, batch_size, epochs, print_loss = False, verbose = False, show_loss = False):
         if self.set_seed:
             tf.random.set_seed(self.set_seed)
+        losses = []
 #        self.xm = tf.Variable(x.mean())
 #        self.xstd = tf.Variable(x.std())
         ds = self._create_ds(x, y, batch_size, epochs)
         for i, el in enumerate(ds):
             if verbose:
                 if i%1000==0: print("Element ", i)
-            self.train_step(el, print_loss, verbose)
+            loss = self.train_step(el, print_loss, verbose)
+            losses.append(loss)
+        if show_loss:
+            plt.plot(np.array(losses))
+            plt.show()
 
     @tf.function
     def train_step(self, el, print_loss = False, verbose = False):
+
         with tf.GradientTape() as tape:
             x, y = el
             y_pred = self.call(x)
             loss = self._loss(y_pred, y)
         grads = tape.gradient(loss, self.variables)
         self.opt.apply_gradients(zip(grads, self.variables))
+
         if print_loss: print(loss)
+        return loss
 
 
 class ConvBCModel(tf.keras.Model):

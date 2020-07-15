@@ -78,7 +78,7 @@ def get_experience(eps, env):
     #        env.render()
         new_states, new_acts, success = man_controller.get_demo(env, state, CTRL_NORM, True)
         if success:
-            test_set.append((p_peg))
+        #    test_set.append((p_peg))
             ep+=1
             states+=new_states
             actions+=new_acts
@@ -243,11 +243,11 @@ def go(seed):
     env = SawyerNutAssemblyEnv()
     env.seed(seed)
 
-    global test_set #= []
-#    for i in range(TEST_EPS):
-#        state = env.reset()
-#        state, goal = utils.save_state(env)
-#        test_set.append((state, goal))
+#    global test_set #= []
+    for i in range(TEST_EPS):
+        state = env.reset()
+        p_peg = utils.save_state(env)
+        test_set.append((p_peg))
 
     states, actions = get_experience(INITIAL_TRAIN_EPS, env)
     print("Normal states, actions ", len(states), len(actions))
