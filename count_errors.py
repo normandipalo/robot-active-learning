@@ -14,24 +14,24 @@ from future_model import *
 import man_controller
 import utils
 
-hyperp = {"INITIAL_TRAIN_EPS" : 50,
+hyperp = {"INITIAL_TRAIN_EPS" : 10,
 
 "BC_LR" : 1e-3,
 "BC_HD" : 128,
 "BC_HL" : 2,
 "BC_BS" : 64,
-"BC_EPS" : 1000,
+"BC_EPS" : 500,
 
 "AE_HD" : 8,
 "AE_HL" : 2,
 "AE_LR" : 1e-3,
 "AE_BS" : 64,
-"AE_EPS" : 10,
+"AE_EPS" : 20,
 
-"TEST_EPS" : 100,
+"TEST_EPS" : 40,
 "ACTIVE_STEPS_RETRAIN" : 10,
 "ACTIVE_ERROR_THR" : 1.5,
-"ERROR_THR_PRED" : 8.,
+"ERROR_THR_PRED" : 6.,
 
 "ORG_TRAIN_SPLIT" : 1.,
 "FULL_TRAJ_ERROR" : True,
@@ -105,7 +105,7 @@ def test(model, ae, test_set, env, xm, xs, am, ast, fulltraj = False, render = T
             action = model((state[None] - xm)/xs)
 
             action = action*ast + am
-            print(action)
+            #print(action)
             new_state, *_ = env.step(action[0])
          #   print(action)
             if render: env.render()
@@ -146,7 +146,7 @@ def test(model, ae, test_set, env, xm, xs, am, ast, fulltraj = False, render = T
     except:
         return successes, failures, -1, -1, [-1], [-1]
 
-def predict(model, ae, test_set, env, xm, xs, am, ast, tot_error_trainset):
+def predict(model, ae, test_set, env, xm, xs, am, ast, tot_error_trainset, ERROR_THR_PRED):
     succ_tp, succ_fp, succ_tn, succ_fn = 0,0,0,0
     successes, failures = 0, 0
     steps_to_stop = []
@@ -268,17 +268,17 @@ def go(seed):
 
     net.train(x, a, BC_BS, BC_EPS)
     obs_dim, act_dim = len(x[0]), len(a[0])
-#    norm = Normalizer(obs_dim, act_dim).fit(x[:-1], a[:-1], x[1:])
+    norm = Normalizer(obs_dim, act_dim).fit(x[:-1], a[:-1], x[1:])
 
-#    dyn = NNDynamicsModel(obs_dim, act_dim, 128, norm, 64, 500, 3e-4)
-#    dyn.fit({"states": x[:-1], "acts" : a[:-1], "next_states" : x[1:]}, plot = False)
+    dyn = NNDynamicsModel(obs_dim, act_dim, 128, norm, 64, 500, 3e-4)
+    dyn.fit({"states": x[:-1], "acts" : a[:-1], "next_states" : x[1:]}, plot = False)
 
     ae_x = AE(9, AE_HD, AE_HL, AE_LR)
     #ae = RandomNetwork(1, AE_HD, AE_HL, AE_LR)
 
     ae_x.train(x, AE_BS, AE_EPS)
-#    ae = FutureUnc(net, dyn, ae_x, steps = 3)
-    ae = ae_x
+    ae = FutureUnc(net, dyn, ae_x, steps = 1)
+#    ae = ae_x
     tot_error_trainset = 0
     for el in x:
         error = ae.error(el.reshape((1,-1)))
@@ -300,7 +300,7 @@ def go(seed):
 
         print("Average full trajectory error on train set", tot_error_train_fulltraj)
         file.write(str("Average full trajectory error on train set") + str(tot_error_train_fulltraj))
-    _ = input("Go?")
+    #_ = input("Go?")
     succ, fail, error_avg_s, error_avg_f, succ_list, fail_list = test(net, ae, test_set, env, xm, xs, am, ast, fulltraj = FULL_TRAJ, render = RENDER_TEST)
     print("Active learning results ", seed, " : ", succ, fail, "avg error on succ trails: ", error_avg_s, "on fail: ", error_avg_f, "std on succ:", np.std(succ_list), "on fail:", np.std(fail_list))
     file.write(str("Active learning results ") + str(seed) +  str(" : ") + str(succ) + str(fail) + str(error_avg_s) + str(error_avg_f) + str(np.std(succ_list)) +  str(np.std(fail_list)))
@@ -309,17 +309,19 @@ def go(seed):
 
 
 
-    succ_tp, succ_fp, succ_tn, succ_fn = predict(net, ae, test_set, env, xm, xs, am, ast, tot_error_trainset)
+    for err_pred in [0.5,0.6,0.7]:
+        print("Error threshold", ERROR_THR_PRED*err_pred)
+        succ_tp, succ_fp, succ_tn, succ_fn = predict(net, ae, test_set, env, xm, xs, am, ast, tot_error_trainset, ERROR_THR_PRED*err_pred)
 
-    #change to consider failures
-    succ_tp, succ_fp, succ_tn, succ_fn = succ_tn, succ_fn, succ_tp, succ_fp
-    fail, succ = succ, fail
+        #change to consider failures
+        succ_tp, succ_fp, succ_tn, succ_fn = succ_tn, succ_fn, succ_tp, succ_fp
+        fail, succ = succ, fail
 
-    print("succ tp, fp, tn, fn", succ_tp, succ_fp, succ_tn, succ_fn)
-    precision = (succ_tp/(succ_tp+succ_fp + 0.001))
-    recall = (succ_tp/(succ_tp+succ_fn))
-    print("F1 score", (2*precision*recall/(precision + recall)))
-    print("F1 for all positives",  (2*(succ/(succ + fail))*1/((succ/(succ + fail)) + 1)))
+        print("succ tp, fp, tn, fn", succ_tp, succ_fp, succ_tn, succ_fn)
+        precision = (succ_tp/(succ_tp+succ_fp + 0.001))
+        recall = (succ_tp/(succ_tp+succ_fn))
+        print("F1 score", (2*precision*recall/(precision + recall)))
+        print("F1 for all positives",  (2*(succ/(succ + fail))*1/((succ/(succ + fail)) + 1)))
     return (2*precision*recall/(precision + recall)), 2*(succ/(succ + fail))*1/((succ/(succ + fail)) + 1)
 
 
