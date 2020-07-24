@@ -38,6 +38,7 @@ def get_experience(eps, env, render = False):
 
     return states, actions
 
+"""
 def try_complete(model, ae, error_thr, env, xm, xs, am, ast, render = False):
     succeded = 0
     state, *_ = env.step([0.,0.,0.,0.])
@@ -51,6 +52,45 @@ def try_complete(model, ae, error_thr, env, xm, xs, am, ast, render = False):
         time.sleep(0.2)
 
         if error > error_thr:
+            #Return the current env and state to get an expert demo. Return False
+            # to signal that it was unable to complete.
+            return False, env, state, error
+
+        action = model((np.concatenate((state["observation"],
+                                    state["achieved_goal"],
+                                    state["desired_goal"])).reshape((1,-1)) - xm)/xs)
+
+        action = action*ast + am
+        new_state, *_ = env.step(action[0])
+     #   print(action)
+        if render: env.render()
+        state = new_state
+
+        if not np.linalg.norm((state["achieved_goal"]- state["desired_goal"])) > 0.10:
+    #        print("SUCCESS!")
+            return True, env, state, error
+
+    return False, env, state, error
+"""    
+    
+    
+def try_complete(model, ae, error_thr, env, xm, xs, am, ast, render = False):
+    #This version randomly stops on policy. (used for benchmarks)
+    succeded = 0
+    state, *_ = env.step([0.,0.,0.,0.])
+    picked = [False]
+#    print("Error threshold", error_thr)
+    for i in range(100):
+        error = 1.234
+        #error = ae.error((np.concatenate((state["observation"],
+        #                            state["achieved_goal"],
+        #                            state["desired_goal"])).reshape((1,-1)) - xm)/xs)
+#        print("Error in try_complete", error)
+        #time.sleep(0.2)
+        rand = np.random.randint(low = 0, high = 30)
+        
+        if rand == 1:
+            print("random stop")
             #Return the current env and state to get an expert demo. Return False
             # to signal that it was unable to complete.
             return False, env, state, error
@@ -261,16 +301,16 @@ def go(seed, file):
 
         #if AE_RESTART: ae = DAE(31, AE_HD, AE_HL, AE_LR, set_seed = seed)
         #Reinitialize both everytime and retrain.
-        norm = Normalizer(31, 4).fit(x[:-1], a[:-1], x[1:])
+        #norm = Normalizer(31, 4).fit(x[:-1], a[:-1], x[1:])
 
-        dyn = NNDynamicsModel(31, 4, 128, norm, 64, 500, 3e-4)
-        dyn.fit({"states": x[:-1], "acts" : a[:-1], "next_states" : x[1:]}, plot = False)
+        #dyn = NNDynamicsModel(31, 4, 128, norm, 64, 500, 3e-4)
+        #dyn.fit({"states": x[:-1], "acts" : a[:-1], "next_states" : x[1:]}, plot = False)
 
         ae_x = AE(31, AE_HD, AE_HL, AE_LR)
         #ae = RandomNetwork(1, AE_HD, AE_HL, AE_LR)
 
         ae_x.train(x, AE_BS, AE_EPS)
-        ae = FutureUnc(net, dyn, ae_x, steps = 5)
+        ae = ae_x #FutureUnc(net, dyn, ae_x, steps = 5)
         net_hf = model.BCModel(states[0].shape[0], actions[0].shape[0], BC_HD, BC_HL, BC_LR, set_seed = seed)
 
         start = time.time()
