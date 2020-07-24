@@ -15,7 +15,7 @@ import utils as u
 from hparams import *
 from envs import *
 
-hyperp = {"INITIAL_TRAIN_EPS" : 400,
+hyperp = {"INITIAL_TRAIN_EPS" : 150,
 
 "BC_LR" : 1e-3,
 "BC_HD" : 128,
@@ -135,7 +135,7 @@ def test(model, ae, test_set, env, xm, xs, am, ast, fulltraj = False, render = F
 
     return successes, failures, error_succ/successes, error_fail/failures, succ_errors_list, fail_errors_list
 
-def predict(model, ae, test_set, env, xm, xs, am, ast, tot_error_trainset):
+def predict(model, ae, test_set, env, xm, xs, am, ast, tot_error_trainset, ERROR_THR_PRED):
     succ_tp, succ_fp, succ_tn, succ_fn = 0,0,0,0
     successes, failures = 0, 0
     steps_to_stop = []
@@ -197,9 +197,10 @@ def predict(model, ae, test_set, env, xm, xs, am, ast, tot_error_trainset):
             failures += 1
             if prediction == "failure":
                 succ_tn +=1
-                steps_to_stop.append(steps)
+                steps_to_stop.append(steps) 
             elif prediction == "success":
                 succ_fp += 1
+                steps_to_stop.append(100) #non lo ha predetto, dunque dico che ci ha messo N (100 a caso ora) steps. altrimenti sballa i risultati 
 
     print("successes, failures", successes, failures)
     print("steps to stop", steps_to_stop, np.array(steps_to_stop).mean())
@@ -238,7 +239,7 @@ def get_active_exp(env, threshold, ae, xm, xs, render):
     return new_states, new_acts
 
 
-def go(seed):
+def go(seed, fut_steps = 5):
     tf.random.set_seed(seed)
     env = FetchPickAndPlaceTwoEnv()
     env = Fetch2Cubes(env)
@@ -276,16 +277,17 @@ def go(seed):
     dyn = NNDynamicsModel(obs_dim, act_dim, 128, norm, 64, 100, 3e-4)
     dyn.fit({"states": x[:-1], "acts" : a[:-1], "next_states" : x[1:]}, plot = False)
     print("Dynamics model trained in", time.time() - start)
-    #ae = DAE(states[0].shape[0], AE_HD, AE_HL, AE_LR)
-    ae_x = AE(states[0].shape[0], AE_HD, AE_HL, AE_LR)
+    ae_x = DAE(states[0].shape[0], AE_HD, AE_HL, AE_LR)
+    #ae_x = AE(states[0].shape[0], AE_HD, AE_HL, AE_LR)
     #ae = RandomNetwork(1, AE_HD, AE_HL, AE_LR)
     ae_x.train(x, AE_BS, AE_EPS)
-    ae = FutureUnc(net, dyn, ae_x, steps = 5)
+    ae = FutureUnc(net, dyn, ae_x, steps = fut_steps)
 
     #ae = net
     tot_error_trainset = 0
     for el in x:
-        error = ae.error(el.reshape((1,-1)))
+        #Here I use the error of the normal ae, not the future
+        error = ae_x.error(el.reshape((1,-1)))
         tot_error_trainset+=error
     tot_error_trainset/=len(x)
 
@@ -314,26 +316,30 @@ def go(seed):
 
   #  file.write(str("Active learning results " + str(seed) + " : " + str(result_t)))
 
+    fail, succ = succ, fail #Positive are failures now
+    
+    for err_thr in [0.5,0.7,1.,1.5]:
+        print("\n Error threshold ", err_thr*ERROR_THR_PRED)
+        print("future steps", fut_steps)
+        env.seed(seed)
+        np.random.seed(seed)
+        tf.random.set_seed(seed)
+        succ_tp, succ_fp, succ_tn, succ_fn = predict(net, ae, test_set, env, xm, xs, am, ast, tot_error_trainset, err_thr*ERROR_THR_PRED)
 
-    env.seed(seed)
-    np.random.seed(seed)
-    tf.random.set_seed(seed)
-    succ_tp, succ_fp, succ_tn, succ_fn = predict(net, ae, test_set, env, xm, xs, am, ast, tot_error_trainset)
+        #change to consider failures
+        succ_tp, succ_fp, succ_tn, succ_fn = succ_tn, succ_fn, succ_tp, succ_fp
+       
 
-    #change to consider failures
-    succ_tp, succ_fp, succ_tn, succ_fn = succ_tn, succ_fn, succ_tp, succ_fp
-    fail, succ = succ, fail
-
-    print("succ tp, fp, tn, fn", succ_tp, succ_fp, succ_tn, succ_fn)
-    file.write(str("\n" + str("succ tp, fp, tn, fn") + str(succ_tp) + str(succ_fp) + str(succ_tn) + str(succ_fn)))
-    precision = (succ_tp/(succ_tp+succ_fp + 0.001))
-    recall = (succ_tp/(succ_tp+succ_fn))
-    print("precision ", precision, "recall", recall)
-    print("F1 score", (2*precision*recall/(precision + recall)))
-    print("F1 for all positives",  (2*(succ/(succ + fail))*1/((succ/(succ + fail)) + 1)))
-    file.write(str("F1 score") + str((2*precision*recall/(precision + recall))))
-    file.write(str("\n"))
-    file.write(str("F1 for all positives") + str((2*(succ/(succ + fail))*1/((succ/(succ + fail)) + 1))))
+        print("succ tp, fp, tn, fn", succ_tp, succ_fp, succ_tn, succ_fn)
+        file.write(str("\n" + str("succ tp, fp, tn, fn") + str(succ_tp) + str(succ_fp) + str(succ_tn) + str(succ_fn)))
+        precision = (succ_tp/(succ_tp+succ_fp + 0.001))
+        recall = (succ_tp/(succ_tp+succ_fn))
+        print("precision ", precision, "recall", recall)
+        print("F1 score", (2*precision*recall/(precision + recall)))
+        print("F1 for all positives",  (2*(succ/(succ + fail))*1/((succ/(succ + fail)) + 1)))
+        file.write(str("F1 score") + str((2*precision*recall/(precision + recall))))
+        file.write(str("\n"))
+        file.write(str("F1 for all positives") + str((2*(succ/(succ + fail))*1/((succ/(succ + fail)) + 1))))
     return (2*precision*recall/(precision + recall)), 2*(succ/(succ + fail))*1/((succ/(succ + fail)) + 1)
 
 
@@ -345,14 +351,14 @@ if __name__ == "__main__":
     with open(filename, "a+") as file:
         f1s = 0
         f1s_base = 0
-        for k in range(3):
+        for k in [1,5,9,13,17]:
             print(str(hyperp))
             print(str(k))
             file.write(str(hyperp))
             file.write("\n\n")
             with tf.device("/device:CPU:0"):
                 start_go = time.time()
-                f1s_i, f1s_base_i = go(k)
+                f1s_i, f1s_base_i = go(seed = 0,fut_steps = k)
                 print("\n \n Whole experiment took", time.time() - start_go, "\n \n")
                 f1s += f1s_i
                 f1s_base += f1s_base_i
