@@ -29,7 +29,7 @@ hyperp = {"INITIAL_TRAIN_EPS" : 70,
 "TEST_EPS" : 100,
 "ACTIVE_STEPS_RETRAIN" : 10,
 "ACTIVE_ERROR_THR" : 1.5,
-"ERROR_THR_PRED" : 8.,
+"ERROR_THR_PRED" : 1.1,
 
 "ORG_TRAIN_SPLIT" : 1.,
 "FULL_TRAJ_ERROR" : True,
@@ -70,6 +70,48 @@ def get_experience(eps, env):
         actions+=new_acts
 
     return states, actions
+
+def gather_succ_fails(model, test_set, env, xm, xs, am, ast, fulltraj = False, render = False):
+    successes, failures = 0,0
+    succ_trajs, fail_trajs = [], []
+    for i in range(len(test_set)):
+        succeded = 0
+        env.reset()
+        env = utils.set_state(env, test_set[i][0], test_set[i][1])
+        state, *_ = env.step([0.,0.,0.,0.])
+        picked = [False]
+        curr_traj = []
+        #print("Uncertainty ", error.numpy())
+        for i in range(50):
+            action = model((np.concatenate((state["observation"],
+                                        state["achieved_goal"],
+                                        state["desired_goal"])).reshape((1,-1)) - xm)/xs)
+            
+            action = action*ast + am
+            new_state, *_ = env.step(action[0])
+         #   print(action)
+            if render: env.render()
+            curr_traj.append((np.concatenate((state["observation"],
+                                        state["achieved_goal"],
+                                        state["desired_goal"])).reshape((1,-1)) - xm)/xs)
+            state = new_state
+
+            if not np.linalg.norm((state["achieved_goal"]- state["desired_goal"])) > 0.07:
+          #      print("SUCCESS!")
+                succeded = 1
+                successes +=1
+
+                break
+        if not succeded:
+         #   print("FAILURE")
+            failures+=1
+            fail_trajs += curr_traj
+        else:
+            succ_trajs+=curr_traj
+            
+
+    return successes, failures, succ_trajs, fail_trajs
+
 
 def test(model, ae, test_set, env, xm, xs, am, ast, fulltraj = False, render = False):
     successes, failures = 0,0
@@ -250,7 +292,7 @@ def go(seed):
     states, actions = get_experience(INITIAL_TRAIN_EPS, env)
     print("Normal states, actions ", len(states), len(actions))
     file.write("Normal states, actions " + str(len(states)) + str(len(actions)))
-    net = model.BCModelDropout(states[0].shape[0], actions[0].shape[0], BC_HD, BC_HL, BC_LR)
+    net = model.BCModel(states[0].shape[0], actions[0].shape[0], BC_HD, BC_HL, BC_LR)
 
     x = np.array(states)
     xm = x.mean()
@@ -264,17 +306,58 @@ def go(seed):
 
     net.train(x, a, BC_BS, BC_EPS)
     obs_dim, act_dim = len(x[0]), len(a[0])
-    norm = Normalizer(obs_dim, act_dim).fit(x[:-1], a[:-1], x[1:])
+    #norm = Normalizer(obs_dim, act_dim).fit(x[:-1], a[:-1], x[1:])
 
-    dyn = NNDynamicsModel(obs_dim, act_dim, 128, norm, 64, 500, 3e-4)
-    dyn.fit({"states": x[:-1], "acts" : a[:-1], "next_states" : x[1:]}, plot = False)
+    #dyn = NNDynamicsModel(obs_dim, act_dim, 128, norm, 64, 500, 3e-4)
+    #dyn.fit({"states": x[:-1], "acts" : a[:-1], "next_states" : x[1:]}, plot = False)
 
+    
+    #Get a different set of tasks to gather successes and failures for the failure predictor.
+    gather_set = []
+    for i in range(25):
+        state = env.reset()
+        state, goal = utils.save_state(env)
+        gather_set.append((state, goal))
+    
+    succ, fail, succ_ts, fail_ts = gather_succ_fails(net, gather_set, env, xm, xs, am, ast, fulltraj = FULL_TRAJ, render = RENDER_TEST)
+    print(succ, " successes", fail, " failures gathered.")
+    print("succ, fail ts len", len(succ_ts), len(fail_ts))
+    s_f_ratio = len(fail_ts)/len(succ_ts)
+    succ_ts = succ_ts*math.ceil(s_f_ratio)
+    print("s f ratio", math.ceil(s_f_ratio))
+    succ_ts, fail_ts = np.array(succ_ts).reshape((-1, obs_dim)), np.array(fail_ts).reshape((-1, obs_dim))
+    print("succ, fail ts shape", succ_ts.shape, fail_ts.shape)
+    #fail_ts = fail_ts[:len(succ_ts)] #This should make them of the same size, shrinking the larger.
+    #succ_ts = succ_ts[:len(fail_ts)] 
+    print("succ, fail ts shape", succ_ts.shape, fail_ts.shape)
+    zeros, ones = np.zeros(succ_ts.shape[0]), np.ones(fail_ts.shape[0])
+    
+    train_ts = np.concatenate((succ_ts, fail_ts), 0)
+    print("train ts shape", train_ts.shape)
+    
+    y_ts = np.concatenate((zeros, ones), 0)
+    print("y ts shape", y_ts.shape)
+    
+    fail_net = model.FailPredictor(obs_dim, 64, 2, 3e-5, set_seed = seed)
+    fail_net.train(train_ts, y_ts, 16, 100, print_loss = False, plot_loss = True)
+    
+    
+    #for kk in range(20):
+    #    ii = np.random.randint(0, len(succ_ts))
+    #    print("succ output", fail_net(succ_ts[ii][None]), "fail output", fail_net(fail_ts[ii][None]))
+    
+    
+    """
     ae_x = AE(31, AE_HD, AE_HL, AE_LR)
     #ae = RandomNetwork(1, AE_HD, AE_HL, AE_LR)
 
     ae_x.train(x, AE_BS, AE_EPS)
-    ae = FutureUnc(net, dyn, ae_x, steps = 3)
-
+    ae = ae_x#FutureUnc(net, dyn, ae_x, steps = 3)
+    """
+    
+    fail_net.error = fail_net.call
+    ae = fail_net
+    
     tot_error_trainset = 0
     for el in x:
         error = ae.error(el.reshape((1,-1)))
@@ -296,6 +379,9 @@ def go(seed):
 
         print("Average full trajectory error on train set", tot_error_train_fulltraj)
         file.write(str("Average full trajectory error on train set") + str(tot_error_train_fulltraj))
+    
+    
+    
     succ, fail, error_avg_s, error_avg_f, succ_list, fail_list = test(net, ae, test_set, env, xm, xs, am, ast, fulltraj = FULL_TRAJ, render = RENDER_TEST)
     print("Active learning results ", seed, " : ", succ, fail, "avg error on succ trails: ", error_avg_s, "on fail: ", error_avg_f, "std on succ:", np.std(succ_list), "on fail:", np.std(fail_list))
     file.write(str("Active learning results ") + str(seed) +  str(" : ") + str(succ) + str(fail) + str(error_avg_s) + str(error_avg_f) + str(np.std(succ_list)) +  str(np.std(fail_list)))
