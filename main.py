@@ -21,7 +21,7 @@ def robot_reset(env):
     random_act[3] = 0
     for i in range(20):
         state, *_ = env.step(random_act)
-        env.render()
+        if RENDER_ACT_EXP: env.render()
     return state
 
 def avg_ae_error(ae, x):
@@ -328,7 +328,7 @@ def go(seed, file):
 
     print("Active states, actions ", len(states), len(actions))
 
-    for ep_m in [0.3,0.5,1.,2]:
+    for ep_m in [1.]:
         print("epochs", math.ceil(BC_EPS*ep_m))
         net = model.BCModel(states[0].shape[0], actions[0].shape[0], BC_HD, BC_HL, BC_LR, set_seed = seed)
         net.train(x, a, BC_BS, math.ceil(BC_EPS*ep_m), show_loss = False)
