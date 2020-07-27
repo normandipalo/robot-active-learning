@@ -64,6 +64,7 @@ actions.npy
 states.npy
 .ipynb_checkpoints/
 MUJOCO_LOG.TXT
+plots.ipynb
 
 2019-07-14 20:28:11\.txt
 
