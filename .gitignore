@@ -64,3 +64,4 @@ actions.npy
 states.npy
 .ipynb_checkpoints/
 MUJOCO_LOG.TXT
+plots.ipynb

@@ -281,17 +281,17 @@ def go(seed, file):
 
         #if AE_RESTART: ae = DAE(31, AE_HD, AE_HL, AE_LR, set_seed = seed)
         #Reinitialize both everytime and retrain.
-    #    norm = Normalizer(9, 4).fit(x[:-1], a[:-1], x[1:])
+        norm = Normalizer(9, 4).fit(x[:-1], a[:-1], x[1:])
 
-    #    dyn = NNDynamicsModel(9, 4, 128, norm, 64, 5, 3e-4)
-    #    dyn.fit({"states": x[:-1], "acts" : a[:-1], "next_states" : x[1:]}, plot = False)
+        dyn = NNDynamicsModel(9, 4, 128, norm, 64, 5, 3e-4)
+        dyn.fit({"states": x[:-1], "acts" : a[:-1], "next_states" : x[1:]}, plot = False)
 
         ae_x = AE(9, AE_HD, AE_HL, AE_LR)
         #ae = RandomNetwork(1, AE_HD, AE_HL, AE_LR)
 
         ae_x.train(x, AE_BS, AE_EPS)
-        ae = ae_x
-#        ae = FutureUnc(net, dyn, ae_x, steps = 5)
+     #   ae = ae_x
+        ae = FutureUnc(net, dyn, ae_x, steps = 5)
         net_hf = model.BCModel(states[0].shape[0], actions[0].shape[0], BC_HD, BC_HL, BC_LR, set_seed = seed)
 
         start = time.time()
@@ -357,3 +357,4 @@ if __name__ == "__main__":
             file.write("\n\n")
             with tf.device("/device:CPU:0"):
                 go(k, file)
+            file.flush()
