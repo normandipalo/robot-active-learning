@@ -21,7 +21,7 @@ def robot_reset(env):
     random_act[3] = 0
     for i in range(20):
         state, *_ = env.step(random_act)
-        if RENDER_ACT_EXP: env.render()
+        #env.render()
     return state
 
 def avg_ae_error(ae, x):
@@ -297,7 +297,7 @@ def go(seed, file):
         start = time.time()
 
         net_hf.train(x, a, BC_BS, BC_EPS, show_loss = False)
-        avg_error = avg_ae_error(ae, x)
+        avg_error = avg_ae_error(ae_x, x)
 
         print("Training took:")
         print(time.time() - start)
